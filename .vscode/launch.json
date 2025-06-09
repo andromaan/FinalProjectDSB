@@ -16,6 +16,14 @@
             "env": {
                 "PYTHONPATH": "${workspaceFolder}/app"
             }
-        }
+        },
+        {
+            "name": "Python Debugger: Playwright Tests",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/scraping_temp.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
     ]
 }
