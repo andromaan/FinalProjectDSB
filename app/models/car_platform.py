@@ -10,11 +10,21 @@ class CarPlatform(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True)
     base_search_url: Mapped[str] = mapped_column(String)
+
     brand_selector: Mapped[str] = mapped_column(String)
+    brand_item_selector: Mapped[str] = mapped_column(String, nullable=True)
+
     model_selector: Mapped[str] = mapped_column(String)
+    model_item_selector: Mapped[str] = mapped_column(String, nullable=True)
+
     year_from_selector: Mapped[str] = mapped_column(String)
+    year_from_item_selector: Mapped[str] = mapped_column(String, nullable=True)
+
     year_to_selector: Mapped[str] = mapped_column(String)
-    
+    year_to_item_selector: Mapped[str] = mapped_column(String, nullable=True)
+
+    button_selector: Mapped[str] = mapped_column(String, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

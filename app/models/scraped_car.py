@@ -15,7 +15,7 @@ class ScrapedCar(Base):
         ForeignKey("cars.id", ondelete="CASCADE", nullable=True)
     )
 
-    scraped_year: Mapped[int] = mapped_column(Integer)
+    scraped_year: Mapped[int] = mapped_column(Integer, nullable=True)
     scraped_currency: Mapped[str] = mapped_column(String(3), nullable=True)
     scraped_price: Mapped[str] = mapped_column(String, nullable=True)
     scraped_url: Mapped[str] = mapped_column(String, nullable=True)
