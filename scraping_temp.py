@@ -1,7 +1,8 @@
 import asyncio
 from playwright.async_api import async_playwright
-import re
 from bs4 import BeautifulSoup
+import re
+from typing import Optional
 
 async def select_option_or_click(page, selector, item_selector, value, close_selector):
     if close_selector:
@@ -48,47 +49,104 @@ async def select_option_or_click(page, selector, item_selector, value, close_sel
     if close_selector:
         await close_popup(page, close_selector)
 
-async def scrape_car_details(page, url, selectors):
+class CarDataParser:
+    @staticmethod
+    def parse_text_for_price(content_element):
+        text = content_element.get_text(strip=True) if content_element else "N/A"
+        if text and "=" in text:
+            return text.split('=')[0].strip()
+        else:
+            return text if text != "N/A" else "N/A"
+
+    @staticmethod
+    def parse_text_for_year(content_element):
+        year_text = content_element.get_text(strip=True) if content_element else ""
+        if year_text and ":" in year_text:
+            return year_text.split(':')[1].strip()
+        elif year_text and " " in year_text:
+            return year_text.split(' ')[-1].strip()
+        else:
+            return year_text if year_text != "N/A" else "N/A"
+
+    @staticmethod
+    def parse_text_for_views(content_element):
+        text = content_element.get_text(strip=True) if content_element else ""
+        if content_element and len(content_element.contents) > 1:
+            return content_element.contents[1]
+        elif text and " " in text:
+            return text.split(' ')[1].strip() if " " in text else text
+        else:
+            return text.strip() if text else "N/A"
+    
+    @staticmethod
+    def parse_text_for_mileage(content_element):
+        mileage_text = content_element.get_text(strip=True) if content_element else "N/A"
+        if mileage_text and ":" in mileage_text:
+            return mileage_text.split(':')[1].strip()
+        else:
+            return mileage_text if mileage_text != "N/A" else "N/A"
+
+async def scrape_car_details(page, url, selectors, search_position):
     await page.goto(url)
+
+    html_content = await page.content()
+    soup = BeautifulSoup(html_content, 'html.parser')
 
     data = {}
     try:
         data['url'] = url
-        data['year'] = await page.locator(selectors['year']).inner_text() or "N/A"
 
-        text = await page.locator(selectors['price']).inner_text() or "N/A"
-        if text and "=" in text:
-            data['price'] = text.split('=')[0].strip()
-        else:
-            data['price'] = text if text != "N/A" else "N/A"
+        data['search_position'] = search_position
+
+        # Extract year
+        year_element = soup.select_one(selectors['year'])
+        data['year'] = CarDataParser.parse_text_for_year(year_element)
 
 
-        data['mileage'] = await page.locator(selectors['mileage']).inner_text() or "N/A"
-        if await page.locator(selectors['views']).count() > 0:
-            views_text = await page.locator(selectors['views']).inner_text() or "N/A"
-            if " " in views_text:
-                data['views'] = views_text.split(' ')[0].strip()
-            else:
-                data['views'] = views_text
+        # Extract price
+        price_element = soup.select_one(selectors['price'])
+        data['price'] = CarDataParser.parse_text_for_price(price_element)
+
+        # Extract mileage
+        mileage_element = soup.select_one(selectors['mileage'])
+        data['mileage'] = CarDataParser.parse_text_for_mileage(mileage_element)
+
+        # Extract views
+        views_element = soup.select_one(selectors['views'])
+        if views_element:
+            data['views'] = CarDataParser.parse_text_for_views(views_element)
         else:
             for _ in range(50):
                 await page.mouse.wheel(0, 300)
                 await page.wait_for_timeout(100)
-                if await page.locator(selectors['views']).count() > 0:
-                    data['views'] = await page.locator(selectors['views']).inner_text() or "N/A"
+                html_content = await page.content()
+                soup = BeautifulSoup(html_content, 'html.parser')
+                views_element = soup.select_one(selectors['views'])
+                if views_element:
+                    data['views'] = CarDataParser.parse_text_for_views(views_element)
                     break
-                else:
-                    data['views'] = "N/A"
+            else:
+                data['views'] = "N/A"
+
     except Exception as e:
         data['error'] = str(e)
+
     return data
 
-async def scrape_car_list(page, car_list_selector, url_to_details):
+async def scrape_car_list(page, car_list_selector, url_to_details, base_url=None):
     car_urls = []
     await page.wait_for_selector(car_list_selector, state="visible")
     elements = await page.locator(url_to_details).all()
     for element in elements:
         url = await element.get_attribute("href")
+        if url and base_url:
+                    domain_match = re.match(
+                        r"https?://([^/]+)", base_url
+                    )
+                    if domain_match:
+                        domain = domain_match.group(1)
+                        if domain not in url:
+                            url = f"https://{domain}/{url.lstrip('/')}"
         if url:
             car_urls.append(url)
     return car_urls
@@ -105,7 +163,7 @@ async def close_popup(page, close_selector):
         close_btn = page.locator(close_selector)
         await close_btn.wait_for(state="visible", timeout=3000)
         await close_btn.click()
-        await page.wait_for_timeout(500)
+        await page.wait_for_timeout(100)
     except Exception:
         pass
 
@@ -118,33 +176,33 @@ async def main():
         page = await context.new_page()
 
         try:
-            base_url = "https://www.olx.ua/uk/transport/legkovye-avtomobili/"
+            base_url = "https://auto.ria.com/uk/legkovie/"
             await page.goto(base_url)
 
-            brand_selector = 'div:has(> p:has-text("Підкатегорія")) div.css-1kh9n61'
-            brand_item_selector = 'div.css-192xv8v div.css-1msmb8o'
+            brand_selector = 'label[for="brandTooltipBrandAutocompleteInput-1"]'
+            brand_item_selector = 'li.list-item a'
+            
+            model_selector = 'label[for="brandTooltipModelAutocompleteInput-1"]'
+            model_item_selector = 'li.list-item a.item'
+            
+            year_from_selector = 'div.e-year div.middle select#year'
+            year_from_item_selector = 'div.e-year div.middle select#year option'
 
-            model_selector = 'div:has(> div > span:has-text("Модель")) div.css-t0lbh8'
-            model_item_selector = 'div.css-k4teaq div.css-1d91jbp div.n-checkbox-label-text-wrapper p'
+            year_to_selector = 'div.e-year div.middle select#yearTo'
+            year_to_item_selector = 'div.e-year div.middle select#yearTo option'
+            
+            button_selector = 'div.footbar-search__main button[type="submit"]'
 
-            year_from_selector = 'div.css-1y0lxug:has(> div:has-text("Рік випуску")) input[data-testid="range-from-input"]'
-            year_from_item_selector = ''
+            car_list_selector = 'div#searchResults'
+            url_to_details = 'a.address'
 
-            year_to_selector = 'div.css-1y0lxug:has(> div:has-text("Рік випуску")) input[data-testid="range-to-input"]'
-            year_to_item_selector = ''
-
-            button_selector = ''
-
-            car_list_selector = 'div[data-testid="listing-grid"].css-j0t2x2'
-            url_to_details = 'div[data-cy="ad-card-title"].css-u2ayx9 a.css-1tqlkj0'
-
-            close_selector = 'button[aria-label="Close"]'
+            close_selector = ''
 
             selectors = {
-                'year': 'p.css-1los5bp:has-text("Рік випуску")',
-                'price': 'div[data-testid="ad-price-container"].css-e2ir3r h3',
-                'mileage': 'p.css-1los5bp:has-text("Пробіг:")',
-                'views': 'span[data-testid="page-view-counter"].css-16r9cup'
+                'year': 'div.heading > h1.head',
+                'price': 'section.price > div.price_value strong',
+                'mileage': 'div.base-information.bold',
+                'views': 'aside li#viewsStatistic > span.bold.load'
             }
 
             await select_option_or_click(page, brand_selector, brand_item_selector, "Toyota", close_selector)
@@ -152,24 +210,17 @@ async def main():
             await select_option_or_click(page, year_from_selector, year_from_item_selector, "2018", close_selector)
             await select_option_or_click(page, year_to_selector, year_to_item_selector, "2020", close_selector)
 
-            
             if button_selector:
                 await page.locator(button_selector).click()
-            
-            car_urls = await scrape_car_list(page, car_list_selector, url_to_details)
-            
+
+            car_urls = await scrape_car_list(page, car_list_selector, url_to_details, base_url)
             car_list = []
+
+            search_position = 1
             for url in car_urls:
-                if url and base_url:
-                    domain_match = re.match(
-                        r"https?://([^/]+)", base_url
-                    )
-                    if domain_match:
-                        domain = domain_match.group(1)
-                        if domain not in url:
-                            url = f"https://{domain}/{url.lstrip('/')}"
-                car_data = await scrape_car_details(page, url, selectors)
+                car_data = await scrape_car_details(page, url, selectors, search_position)
                 await add_to_list(car_list, car_data)
+                search_position += 1
             
             await print_car_list(car_list)
             
