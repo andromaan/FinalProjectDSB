@@ -6,11 +6,12 @@ import re
 async def select_option_or_click(page, selector, item_selector, value, close_selector):
     if close_selector:
         await close_popup(page, close_selector)
+
+    await page.wait_for_selector(selector, state="visible")
     element = await page.locator(selector).first.element_handle()
     tag_name = await element.evaluate("el => el.tagName.toLowerCase()")
     
     if tag_name == "select":
-        await page.wait_for_selector(selector, state="visible")
         await page.wait_for_selector(f"{selector} option", state="attached", timeout=10000)
         
         options = await page.locator(selector).evaluate(
@@ -43,7 +44,7 @@ async def select_option_or_click(page, selector, item_selector, value, close_sel
     else:
         await page.wait_for_selector(selector, state="visible")
         await page.locator(selector).first.click()
-        await page.locator(item_selector).get_by_text(re.compile(value, re.IGNORECASE), exact=True).first.click()
+        await page.locator(item_selector).get_by_text(re.compile(f"^{re.escape(value)}$", re.IGNORECASE)).first.click()
     
     if close_selector:
         await close_popup(page, close_selector)
@@ -178,8 +179,9 @@ async def scrape_car_details(page, url, selectors, search_position):
 
     return data
 
-async def scrape_car_list(page, car_list_selector, url_to_details, base_url=None):
+async def scrape_car_list(page, car_list_selector, url_to_details, base_url, button_selector):
     car_urls = []
+    await page.wait_for_timeout(500) if button_selector is not None else 0
     await page.wait_for_selector(car_list_selector, state="visible")
     elements = await page.locator(f"{car_list_selector} {url_to_details}").all()
     for element in elements:
@@ -214,51 +216,51 @@ async def close_popup(page, close_selector):
 
 async def main():
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(headless=False)
         context = await browser.new_context(
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/114.0'
         )
         page = await context.new_page()
 
         try:
-            base_url = "https://auto.ria.com/uk/legkovie/"
+            base_url = "https://rst.ua/ukr/"
             await page.goto(base_url)
 
-            brand_selector = 'label[for="brandTooltipBrandAutocompleteInput-1"]'
-            brand_item_selector = 'li.list-item a'
-            
-            model_selector = 'label[for="brandTooltipModelAutocompleteInput-1"]'
-            model_item_selector = 'li.list-item a.item'
-            
-            year_from_selector = 'div.e-year div.middle select#year'
-            year_from_item_selector = 'div.e-year div.middle select#year option'
+            brand_selector = 'select.form-select#sf-make'
+            brand_item_selector = None
 
-            year_to_selector = 'div.e-year div.middle select#yearTo'
-            year_to_item_selector = 'div.e-year div.middle select#yearTo option'
-            
-            button_selector = 'div.footbar-search__main button[type="submit"]'
+            model_selector = 'select.form-select#sf-model'
+            model_item_selector = None
 
-            car_list_selector = 'div#searchResults'
-            url_to_details = 'a.address'
+            year_from_selector = 'select.form-select[i="5"]'
+            year_from_item_selector = None
 
-            close_selector = ''
+            year_to_selector = 'select.form-select[i="6"]'
+            year_to_item_selector = None
+
+            button_selector = None
+
+            car_list_selector = 'div#p-1.page.bg-body'
+            url_to_details = 'article div.t a.ai'
+
+            close_selector = None
 
             selectors = {
-                'year': 'div.heading > h1.head',
-                'price': 'section.price > div.price_value strong',
-                'mileage': 'div.base-information.bold',
-                'views': 'aside li#viewsStatistic > span.bold.load'
+                'year': 'ul.list-unstyled li[title="рік"] a',
+                'price': 'div.align-items-start div.pr b',
+                'mileage': 'ul.list-unstyled li[title="пробiг"]',
+                'views': 'div.bgs i.in.text-body'
             }
 
-            await select_option_or_click(page, brand_selector, brand_item_selector, "Toyota", close_selector)
-            await select_option_or_click(page, model_selector, model_item_selector, "Camry", close_selector)
-            await select_option_or_click(page, year_from_selector, year_from_item_selector, "2018", close_selector)
-            await select_option_or_click(page, year_to_selector, year_to_item_selector, "2020", close_selector)
+            await select_option_or_click(page, brand_selector, brand_item_selector, "Volkswagen", close_selector)
+            await select_option_or_click(page, model_selector, model_item_selector, "Golf", close_selector)
+            await select_option_or_click(page, year_from_selector, year_from_item_selector, "2000", close_selector)
+            await select_option_or_click(page, year_to_selector, year_to_item_selector, "2010", close_selector)
 
             if button_selector:
                 await page.locator(button_selector).click()
 
-            car_urls = await scrape_car_list(page, car_list_selector, url_to_details, base_url)
+            car_urls = await scrape_car_list(page, car_list_selector, url_to_details, base_url, button_selector)
             car_list = []
 
             search_position = 1

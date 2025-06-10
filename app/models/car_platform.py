@@ -11,6 +11,7 @@ class CarPlatform(Base):
     name: Mapped[str] = mapped_column(String, unique=True)
     base_search_url: Mapped[str] = mapped_column(String)
 
+    # Selectors for the car platform for playwright scraping
     brand_selector: Mapped[str] = mapped_column(String)
     brand_item_selector: Mapped[str] = mapped_column(String, nullable=True)
 
@@ -24,6 +25,17 @@ class CarPlatform(Base):
     year_to_item_selector: Mapped[str] = mapped_column(String, nullable=True)
 
     button_selector: Mapped[str] = mapped_column(String, nullable=True)
+
+    car_list_selector: Mapped[str] = mapped_column(String)
+    url_to_details: Mapped[str] = mapped_column(String)
+
+    close_selector: Mapped[str] = mapped_column(String, nullable=True)
+
+    # Selectors for the scraped car details for BeautifulSoup scraping
+    year_bs4_selector: Mapped[str] = mapped_column(String)
+    price_bs4_selector: Mapped[str] = mapped_column(String)
+    mileage_bs4_selector: Mapped[str] = mapped_column(String)
+    views_bs4_selector: Mapped[str] = mapped_column(String)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
