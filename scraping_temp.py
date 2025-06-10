@@ -2,10 +2,14 @@ import asyncio
 from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 import re
+import logging
 
 async def select_option_or_click(page, selector, item_selector, value, close_selector):
     if close_selector:
         await close_popup(page, close_selector)
+
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
 
     await page.wait_for_selector(selector, state="visible")
     element = await page.locator(selector).first.element_handle()
@@ -42,10 +46,39 @@ async def select_option_or_click(page, selector, item_selector, value, close_sel
         await page.locator(selector).first.fill(value)
         await page.locator(selector).first.press("Enter")
     else:
-        await page.wait_for_selector(selector, state="visible")
         await page.locator(selector).first.click()
-        await page.locator(item_selector).get_by_text(re.compile(f"^{re.escape(value)}$", re.IGNORECASE)).first.click()
-    
+        if item_selector:
+            max_scroll_attempts = 10
+
+            list_items = page.locator(item_selector)
+
+            parent_container = page.locator(f"{item_selector} >> xpath=.. >> xpath=..").first
+            await parent_container.wait_for(timeout=5000)
+
+            for attempt in range(max_scroll_attempts):
+                try:
+
+                    target = list_items.get_by_text(value, exact=False).first
+                    await target.scroll_into_view_if_needed(timeout=500)
+                    is_visible = await target.is_visible()
+                    if is_visible:
+                        await target.click()
+                        logger.info(f"Clicked value '{value}' on attempt {attempt + 1}")
+                        break
+                except Exception:
+                    if attempt == max_scroll_attempts - 1:
+
+                        item_texts = await list_items.evaluate_all(
+                            "elements => elements.map(el => el.textContent.trim())"
+                        )
+                        logger.error(f"Value '{value}' not found in {item_selector} after {max_scroll_attempts} attempts. Available items: {item_texts}")
+                        raise ValueError(f"Value '{value}' not found in {item_selector} after {max_scroll_attempts} attempts")
+                    
+                    await parent_container.evaluate(
+                        "element => element.scrollBy(0, 1000)"
+                    )
+                    logger.debug(f"Scroll attempt {attempt + 1} for value '{value}'")
+
     if close_selector:
         await close_popup(page, close_selector)
 
@@ -181,7 +214,7 @@ async def scrape_car_details(page, url, selectors, search_position):
 
 async def scrape_car_list(page, car_list_selector, url_to_details, base_url, button_selector):
     car_urls = []
-    await page.wait_for_timeout(500) if button_selector is not None else 0
+    await page.wait_for_timeout(500) if button_selector is None else 0
     await page.wait_for_selector(car_list_selector, state="visible")
     elements = await page.locator(f"{car_list_selector} {url_to_details}").all()
     for element in elements:
@@ -252,10 +285,10 @@ async def main():
                 'views': 'div.bgs i.in.text-body'
             }
 
-            await select_option_or_click(page, brand_selector, brand_item_selector, "Volkswagen", close_selector)
-            await select_option_or_click(page, model_selector, model_item_selector, "Golf", close_selector)
-            await select_option_or_click(page, year_from_selector, year_from_item_selector, "2000", close_selector)
-            await select_option_or_click(page, year_to_selector, year_to_item_selector, "2010", close_selector)
+            await select_option_or_click(page, brand_selector, brand_item_selector, "Audi", close_selector)
+            await select_option_or_click(page, model_selector, model_item_selector, "A4", close_selector)
+            await select_option_or_click(page, year_from_selector, year_from_item_selector, "2018", close_selector)
+            await select_option_or_click(page, year_to_selector, year_to_item_selector, "2020", close_selector)
 
             if button_selector:
                 await page.locator(button_selector).click()

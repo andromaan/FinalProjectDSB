@@ -14,6 +14,9 @@ class ScrapedCar(Base):
     car_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("cars.id", ondelete="CASCADE"), nullable=True
     )
+    request_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("scrape_requests.id", ondelete="CASCADE")
+    )
 
     scraped_url: Mapped[str] = mapped_column(String, nullable=True)
     search_position: Mapped[int] = mapped_column(Integer, nullable=True)

@@ -1,20 +1,22 @@
 from typing import List, Annotated
 from fastapi import HTTPException, Depends
 from datetime import datetime, timezone
-import re
 import asyncio
 from playwright.async_api import async_playwright
-from schemas.scraping import (
-    ScrapingConfig,
+from schemas.scraped_car_schema import (
+    ScrapingConfigQuery,
     ScrapingResultSuccess,
     ScrapingResultError,
     ScrapingResults,
     Summary,
-    ScrapedProductCreate,
+    ScrapedCarCreate,
+    ScrapingStatus,
+    ScrapedRequestCreate,
+    ScrapingConfigCar,
 )
 from crud.scraping_repository import ScrapingRepositoryDependency
-from crud.marketplace_repository import MarketplaceRepositoryDependency
-from services.scraping_utils import scrape_product_data
+from crud.car_platform_repository import CarPlatformRepositoryDependency
+from services.scraping_utils import scrape_car_data
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -24,123 +26,133 @@ logger = logging.getLogger(__name__)
 class ScrapingService:
     def __init__(
         self,
-        repo_marketplace: MarketplaceRepositoryDependency,
+        repo_car_platform: CarPlatformRepositoryDependency,
         repo_scraping: ScrapingRepositoryDependency,
     ):
-        self.repo_marketplace = repo_marketplace
+        self.repo_car_platform = repo_car_platform
         self.repo_scraping = repo_scraping
 
     async def scrape_single_marketplace(
         self,
         context,
-        marketplace,
-        product_name: str,
+        car_platform,
+        config: ScrapingConfigQuery,
         scrape_request_id: int,
         semaphore: asyncio.Semaphore,
     ) -> ScrapingResultSuccess | ScrapingResultError:
         async with semaphore:
             try:
-                product_title, price, url = await scrape_product_data(
-                    context=context, marketplace=marketplace, product_name=product_name
+                car_results = await scrape_car_data(
+                    context=context,
+                    car_platform=car_platform,
+                    brand=config.brand,
+                    model=config.model,
+                    year_from=config.year_from,
+                    year_to=config.year_to,
                 )
 
-                scraped_currency = None
-                if price:
-                    match = re.search(r"([^\d.,\s]+)", price)
-                    scraped_currency = match.group(1) if match else None
-
-                if url and marketplace.base_search_url:
-                    domain_match = re.match(
-                        r"https?://([^/]+)", marketplace.base_search_url
+                for search_position, car_data in enumerate(car_results, 1):
+                    await self.repo_scraping.add_scraped_car(
+                        car_data=ScrapedCarCreate(
+                            request_id=scrape_request_id,
+                            car_platform_id=car_platform.id,
+                            scraped_url=car_data.get("url"),
+                            search_position=search_position,
+                            scraped_year=car_data.get("year"),
+                            scraped_price=car_data.get("price"),
+                            scraped_currency=car_data.get("currency"),
+                            scraped_mileage=car_data.get("mileage"),
+                            scraped_mileage_unit=car_data.get("mileage_unit"),
+                            scraped_number_of_views=car_data.get("views"),
+                            status=ScrapingStatus.SUCCESS,
+                            error_message=None,
+                        )
                     )
-                    if domain_match:
-                        domain = domain_match.group(1)
-                        if domain not in url:
-                            url = f"https://{domain}/{url.lstrip('/')}"
 
-                scraping_result_success = ScrapingResultSuccess(
-                    marketplace_name=marketplace.name,
+                # Return the first result for simplicity in results summary
+                first_car = car_results[0] if car_results else {}
+                return ScrapingResultSuccess(
+                    marketplace_name=car_platform.name,
                     status="success",
-                    product_title=product_title,
-                    price=price,
-                    url=url,
+                    brand=config.brand,
+                    model=config.model,
+                    year=first_car.get("year"),
+                    price=first_car.get("price"),
+                    currency=first_car.get("currency"),
+                    mileage=first_car.get("mileage"),
+                    mileage_unit=first_car.get("mileage_unit"),
+                    views=first_car.get("views"),
+                    url=first_car.get("url"),
+                    search_position=1,
                     scraped_at=datetime.now(timezone.utc),
                 )
 
-                await self.repo_scraping.create_scraped_product(
-                    product_data=ScrapedProductCreate(
-                        request_id=scrape_request_id,
-                        marketplace_id=marketplace.id,
-                        scraped_product_title=product_title,
-                        scraped_price=price,
-                        scraped_currency=scraped_currency,
-                        product_url=url,
-                        status="success",
-                        error_message=None,
-                    )
-                )
-                return scraping_result_success
-
             except RuntimeError as e:
                 error_message = str(e)
-                status = "error_scraping"
-                if "Product not found" in error_message:
-                    status = "not_found"
-                elif "Invalid product selector" in error_message:
-                    status = "invalid_selector"
-                elif "Site unavailable" in error_message:
-                    status = "site_unavailable"
+                status = ScrapingStatus.ERROR_SCRAPING
+                if "not found" in error_message.lower():
+                    status = ScrapingStatus.NOT_FOUND
+                elif "selector" in error_message.lower():
+                    status = ScrapingStatus.INVALID_SELECTOR
+                elif "site unavailable" in error_message.lower():
+                    status = ScrapingStatus.SITE_UNAVAILABLE
 
-                scraping_result_error = ScrapingResultError(
-                    marketplace_name=marketplace.name,
+                await self.repo_scraping.add_scraped_car(
+                    car_data=ScrapedCarCreate(
+                        request_id=scrape_request_id,
+                        car_platform_id=car_platform.id,
+                        scraped_url=None,
+                        search_position=None,
+                        scraped_year=None,
+                        scraped_price=None,
+                        scraped_currency=None,
+                        scraped_mileage=None,
+                        scraped_mileage_unit=None,
+                        scraped_number_of_views=None,
+                        status=status,
+                        error_message=error_message,
+                    )
+                )
+                return ScrapingResultError(
+                    marketplace_name=car_platform.name,
                     status=status,
                     error_message=error_message,
                     scraped_at=datetime.now(timezone.utc),
                 )
 
-                await self.repo_scraping.create_scraped_product(
-                    product_data=ScrapedProductCreate(
-                        request_id=scrape_request_id,
-                        marketplace_id=marketplace.id,
-                        scraped_product_title=product_name,
-                        scraped_price=None,
-                        scraped_currency=None,
-                        product_url=None,
-                        status=status,
-                        error_message=error_message,
-                    )
-                )
-                return scraping_result_error
-
-    async def scrape_product(self, config: ScrapingConfig) -> ScrapingResults:
-        all_marketplaces = await self.repo_marketplace.get_all_active_marketplaces()
+    async def scrape_car_with_query(
+        self, config: ScrapingConfigQuery
+    ) -> ScrapingResults:
+        all_marketplaces = await self.repo_car_platform.get_all_car_platforms()
 
         if config.marketplace_ids:
             marketplace_map = {mp.id: mp for mp in all_marketplaces}
-            selected_marketplaces = [
+            chosen_car_platforms = [
                 mp
                 for mp_id, mp in marketplace_map.items()
                 if mp_id in config.marketplace_ids
             ]
-            if len(selected_marketplaces) != len(config.marketplace_ids):
+            if len(chosen_car_platforms) != len(config.marketplace_ids):
                 invalid_ids = set(config.marketplace_ids) - set(marketplace_map.keys())
                 raise HTTPException(
                     status_code=404,
                     detail=f"Marketplace(s) with ID(s) {invalid_ids} not found",
                 )
         else:
-            selected_marketplaces = all_marketplaces
+            chosen_car_platforms = all_marketplaces
 
         results: List[ScrapingResultSuccess | ScrapingResultError] = []
-        scraping_request = await self.repo_scraping.create_scrape_request(
-            product_name=config.product_name
+        scraping_request = await self.repo_scraping.add_scrape_request(
+            ScrapedRequestCreate(
+                search_query=f"{config.brand} {config.model} {config.year_from}-{config.year_to}",
+            )
         )
 
         max_concurrent_requests = 4
         semaphore = asyncio.Semaphore(max_concurrent_requests)
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False)
+            browser = await p.chromium.launch(headless=True)
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/114.0"
             )
@@ -148,12 +160,12 @@ class ScrapingService:
             tasks = [
                 self.scrape_single_marketplace(
                     context=context,
-                    marketplace=marketplace,
-                    product_name=config.product_name,
+                    car_platform=car_platform,
+                    config=config,
                     scrape_request_id=scraping_request.id,
                     semaphore=semaphore,
                 )
-                for marketplace in selected_marketplaces
+                for car_platform in chosen_car_platforms
             ]
             results = await asyncio.gather(*tasks, return_exceptions=False)
 
@@ -172,18 +184,90 @@ class ScrapingService:
 
         return ScrapingResults(
             scrape_request_id=scraping_request.id,
-            product_name_searched=config.product_name,
+            brand_searched=config.brand,
+            model_searched=config.model,
             results=results,
             summary=summary,
         )
 
+    # async def scrape_car_with_model(
+    #     self, config: ScrapingConfigCar
+    # ) -> ScrapingResults:
+    #     all_marketplaces = await self.repo_car_platform.get_all_car_platforms()
+
+    #     if config.marketplace_ids:
+    #         marketplace_map = {mp.id: mp for mp in all_marketplaces}
+    #         selected_marketplaces = [
+    #             mp
+    #             for mp_id, mp in marketplace_map.items()
+    #             if mp_id in config.marketplace_ids
+    #         ]
+    #         if len(selected_marketplaces) != len(config.marketplace_ids):
+    #             invalid_ids = set(config.marketplace_ids) - set(marketplace_map.keys())
+    #             raise HTTPException(
+    #                 status_code=404,
+    #                 detail=f"Marketplace(s) with ID(s) {invalid_ids} not found",
+    #             )
+    #     else:
+    #         selected_marketplaces = all_marketplaces
+
+    #     results: List[ScrapingResultSuccess | ScrapingResultError] = []
+    #     scraping_request = await self.repo_scraping.add_scrape_request(
+    #         ScrapedRequestCreate(
+    #             car_id=None,
+    #             search_query=None,
+    #         )
+    #     )
+
+    #     max_concurrent_requests = 4
+    #     semaphore = asyncio.Semaphore(max_concurrent_requests)
+
+    #     async with async_playwright() as p:
+    #         browser = await p.chromium.launch(headless=False)
+    #         context = await browser.new_context(
+    #             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/114.0"
+    #         )
+
+    #         tasks = [
+    #             self.scrape_single_marketplace(
+    #                 context=context,
+    #                 marketplace=marketplace,
+    #                 config=config,
+    #                 scrape_request_id=scraping_request.id,
+    #                 semaphore=semaphore,
+    #             )
+    #             for marketplace in selected_marketplaces
+    #         ]
+    #         results = await asyncio.gather(*tasks, return_exceptions=False)
+
+    #         await context.close()
+    #         await browser.close()
+
+    #     summary = Summary(
+    #         total_marketplaces_processed=len(results),
+    #         successful_scrapes=sum(
+    #             1 for r in results if isinstance(r, ScrapingResultSuccess)
+    #         ),
+    #         failed_scrapes=sum(
+    #             1 for r in results if isinstance(r, ScrapingResultError)
+    #         ),
+    #     )
+
+    #     return ScrapingResults(
+    #         scrape_request_id=scraping_request.id,
+    #         brand_searched=config.brand,
+    #         model_searched=config.model,
+    #         results=results,
+    #         summary=summary,
+    #     )
+
 
 def get_scraping_service(
-    repo_marketplace: MarketplaceRepositoryDependency,
+    repo_car_platform: CarPlatformRepositoryDependency,
     repo_scraping: ScrapingRepositoryDependency,
 ):
     return ScrapingService(
-        repo_marketplace=repo_marketplace, repo_scraping=repo_scraping
+        repo_car_platform=repo_car_platform, repo_scraping=repo_scraping
     )
 
 
