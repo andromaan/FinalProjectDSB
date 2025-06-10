@@ -2,7 +2,6 @@ import asyncio
 from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 import re
-from typing import Optional
 
 async def select_option_or_click(page, selector, item_selector, value, close_selector):
     if close_selector:
@@ -52,39 +51,81 @@ async def select_option_or_click(page, selector, item_selector, value, close_sel
 class CarDataParser:
     @staticmethod
     def parse_text_for_price(content_element):
-        text = content_element.get_text(strip=True) if content_element else "N/A"
+        text = content_element.get_text(strip=True) if content_element else None
         if text and "=" in text:
-            return text.split('=')[0].strip()
-        else:
-            return text if text != "N/A" else "N/A"
+            text = text.split('=')[0].strip()
+        
+        if text is None:
+            return None, None
+        
+        text = text.replace("'", "").replace(",", "").strip()
+    
+        currency = None
+        if '$' in text:
+            currency = '$'
+            text = text.replace('$', '').strip()
+        elif 'USD' in text:
+            currency = 'USD'
+            text = text.replace('USD', '').strip()
+        
+        try:
+            price = ''.join(c for c in text if c.isdigit())
+            price = int(price) if price else None
+        except ValueError:
+            price = None
+        
+        return price, currency
 
     @staticmethod
     def parse_text_for_year(content_element):
-        year_text = content_element.get_text(strip=True) if content_element else ""
+        year_text = content_element.get_text(strip=True) if content_element else None
         if year_text and ":" in year_text:
             return year_text.split(':')[1].strip()
         elif year_text and " " in year_text:
             return year_text.split(' ')[-1].strip()
         else:
-            return year_text if year_text != "N/A" else "N/A"
+            return year_text if year_text is not None else None
 
     @staticmethod
     def parse_text_for_views(content_element):
-        text = content_element.get_text(strip=True) if content_element else ""
+        text = content_element.get_text(strip=True) if content_element else None
         if content_element and len(content_element.contents) > 1:
-            return content_element.contents[1]
+            return int(content_element.contents[1])
         elif text and " " in text:
-            return text.split(' ')[1].strip() if " " in text else text
+            parsed_text_with_spaces = text.split(' ')[1].strip() if " " in text else text
+            return int(parsed_text_with_spaces) if parsed_text_with_spaces.isdigit() else None
         else:
-            return text.strip() if text else "N/A"
-    
+            return int(text.strip()) if text else None
+
     @staticmethod
     def parse_text_for_mileage(content_element):
-        mileage_text = content_element.get_text(strip=True) if content_element else "N/A"
+        mileage_text = content_element.get_text(strip=True) if content_element else None
         if mileage_text and ":" in mileage_text:
-            return mileage_text.split(':')[1].strip()
-        else:
-            return mileage_text if mileage_text != "N/A" else "N/A"
+            mileage_text = mileage_text.split(':')[1].strip()
+        
+        if mileage_text is None:
+            return None, None
+    
+        mileage_text = mileage_text.replace("'", "").replace(",", "").strip()
+        
+        unit = None
+        multiply_by_1000 = False
+        if 'км' in mileage_text.lower():
+            unit = 'км'
+            if 'тис' in mileage_text.lower():
+                multiply_by_1000 = True
+                mileage_text = mileage_text.lower().replace('км', '').replace('тис.', '').replace('тис', '').replace('пробіг', '').strip()
+        
+        try:
+            mileage = ''.join(c for c in mileage_text if c.isdigit())
+            if mileage:
+                mileage = int(mileage) * 1000 if multiply_by_1000 else int(mileage)
+            else:
+                mileage = None
+        except ValueError:
+            mileage = None
+        
+        return mileage, unit
 
 async def scrape_car_details(page, url, selectors, search_position):
     await page.goto(url)
@@ -105,11 +146,15 @@ async def scrape_car_details(page, url, selectors, search_position):
 
         # Extract price
         price_element = soup.select_one(selectors['price'])
-        data['price'] = CarDataParser.parse_text_for_price(price_element)
+        price, currency = CarDataParser.parse_text_for_price(price_element)
+        data['price'] = price
+        data['currency'] = currency
 
         # Extract mileage
         mileage_element = soup.select_one(selectors['mileage'])
-        data['mileage'] = CarDataParser.parse_text_for_mileage(mileage_element)
+        mileage, mileage_unit = CarDataParser.parse_text_for_mileage(mileage_element)
+        data['mileage'] = mileage
+        data['mileage_unit'] = mileage_unit
 
         # Extract views
         views_element = soup.select_one(selectors['views'])
@@ -126,7 +171,7 @@ async def scrape_car_details(page, url, selectors, search_position):
                     data['views'] = CarDataParser.parse_text_for_views(views_element)
                     break
             else:
-                data['views'] = "N/A"
+                data['views'] = None
 
     except Exception as e:
         data['error'] = str(e)
@@ -136,17 +181,17 @@ async def scrape_car_details(page, url, selectors, search_position):
 async def scrape_car_list(page, car_list_selector, url_to_details, base_url=None):
     car_urls = []
     await page.wait_for_selector(car_list_selector, state="visible")
-    elements = await page.locator(url_to_details).all()
+    elements = await page.locator(f"{car_list_selector} {url_to_details}").all()
     for element in elements:
         url = await element.get_attribute("href")
         if url and base_url:
-                    domain_match = re.match(
-                        r"https?://([^/]+)", base_url
-                    )
-                    if domain_match:
-                        domain = domain_match.group(1)
-                        if domain not in url:
-                            url = f"https://{domain}/{url.lstrip('/')}"
+            domain_match = re.match(
+                r"https?://([^/]+)", base_url
+            )
+            if domain_match:
+                domain = domain_match.group(1)
+                if domain not in url:
+                    url = f"https://{domain}/{url.lstrip('/')}"
         if url:
             car_urls.append(url)
     return car_urls
@@ -169,7 +214,7 @@ async def close_popup(page, close_selector):
 
 async def main():
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
+        browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/114.0'
         )
