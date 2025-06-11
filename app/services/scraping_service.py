@@ -16,12 +16,8 @@ from schemas.scraped_car_schema import (
 from crud.scraping_repository import ScrapingRepositoryDependency
 from crud.car_platform_repository import CarPlatformRepositoryDependency
 from services.scraping_utils import scrape_car_data
-import logging
 import time
-
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from services.logger_service import logger
 
 
 class ScrapingService:

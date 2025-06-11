@@ -2,14 +2,11 @@ from typing import List, Dict, Optional
 from playwright.async_api import BrowserContext, Page
 from bs4 import BeautifulSoup, Tag
 import re
-import logging
 from models.car_platform import CarPlatform
 from services.car_data_parser import CarDataParser
 from datetime import datetime, timezone
 from schemas.scraped_car_schema import ScrapedCarItem
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from services.logger_service import logger
 
 
 async def select_option_or_click(
