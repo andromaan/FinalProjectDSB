@@ -24,6 +24,7 @@ class ScrapedCarCreate(BaseModel):
     scraped_mileage: Optional[int] = None
     scraped_mileage_unit: Optional[str] = None
     scraped_number_of_views: Optional[int] = None
+    scraped_at: Optional[datetime] = None
     status: ScrapingStatus
     error_message: Optional[str]
 
@@ -43,17 +44,8 @@ class ScrapingConfigCar(BaseModel):
 class ScrapingResultSuccess(BaseModel):
     marketplace_name: str
     status: str = "success"
-    brand: str
-    model: str
-    year: Optional[str]
-    price: Optional[int]
-    currency: Optional[str]
-    mileage: Optional[int]
-    mileage_unit: Optional[str]
-    views: Optional[int]
-    url: Optional[str]
-    search_position: int
-    scraped_at: datetime
+    cars_scraped: int
+    time_to_scrape_platform: str
 
 
 class ScrapingResultError(BaseModel):
@@ -105,4 +97,14 @@ class ScrapeRequestResponse(BaseModel):
     requested_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
+
+class ScrapedCarItem(BaseModel):
+    url: str
+    year: Optional[int] = None
+    price: Optional[int] = None
+    currency: Optional[str] = None
+    mileage: Optional[int] = None
+    mileage_unit: Optional[str] = None
+    views: Optional[int] = None
+    scraped_at: Optional[datetime] = None

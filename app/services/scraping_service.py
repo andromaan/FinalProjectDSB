@@ -17,6 +17,8 @@ from crud.scraping_repository import ScrapingRepositoryDependency
 from crud.car_platform_repository import CarPlatformRepositoryDependency
 from services.scraping_utils import scrape_car_data
 import logging
+import time
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -40,6 +42,7 @@ class ScrapingService:
         semaphore: asyncio.Semaphore,
     ) -> ScrapingResultSuccess | ScrapingResultError:
         async with semaphore:
+            start_time = time.perf_counter()
             try:
                 car_results = await scrape_car_data(
                     context=context,
@@ -55,35 +58,29 @@ class ScrapingService:
                         car_data=ScrapedCarCreate(
                             request_id=scrape_request_id,
                             car_platform_id=car_platform.id,
-                            scraped_url=car_data.get("url"),
+                            scraped_url=car_data.url,
                             search_position=search_position,
-                            scraped_year=car_data.get("year"),
-                            scraped_price=car_data.get("price"),
-                            scraped_currency=car_data.get("currency"),
-                            scraped_mileage=car_data.get("mileage"),
-                            scraped_mileage_unit=car_data.get("mileage_unit"),
-                            scraped_number_of_views=car_data.get("views"),
+                            scraped_year=car_data.year,
+                            scraped_price=car_data.price,
+                            scraped_currency=car_data.currency,
+                            scraped_mileage=car_data.mileage,
+                            scraped_mileage_unit=car_data.mileage_unit,
+                            scraped_number_of_views=car_data.views,
+                            scraped_at=car_data.scraped_at,
                             status=ScrapingStatus.SUCCESS,
                             error_message=None,
                         )
                     )
 
+                time_to_scrape_platform = time.perf_counter() - start_time
+                logger.info(f"Scraped {car_platform.name} in {time_to_scrape_platform:.2f} seconds")
+
                 # Return the first result for simplicity in results summary
-                first_car = car_results[0] if car_results else {}
                 return ScrapingResultSuccess(
                     marketplace_name=car_platform.name,
                     status="success",
-                    brand=config.brand,
-                    model=config.model,
-                    year=first_car.get("year"),
-                    price=first_car.get("price"),
-                    currency=first_car.get("currency"),
-                    mileage=first_car.get("mileage"),
-                    mileage_unit=first_car.get("mileage_unit"),
-                    views=first_car.get("views"),
-                    url=first_car.get("url"),
-                    search_position=1,
-                    scraped_at=datetime.now(timezone.utc),
+                    cars_scraped=len(car_results),
+                    time_to_scrape_platform=f"{time_to_scrape_platform:.2f} seconds",
                 )
 
             except RuntimeError as e:
@@ -108,6 +105,7 @@ class ScrapingService:
                         scraped_mileage=None,
                         scraped_mileage_unit=None,
                         scraped_number_of_views=None,
+                        scraped_at=datetime.now(timezone.utc),
                         status=status,
                         error_message=error_message,
                     )
@@ -120,7 +118,7 @@ class ScrapingService:
                 )
 
     async def scrape_car_with_query(
-        self, config: ScrapingConfigQuery
+        self, config: ScrapingConfigQuery, headless: bool = True
     ) -> ScrapingResults:
         all_marketplaces = await self.repo_car_platform.get_all_car_platforms()
 
@@ -151,7 +149,7 @@ class ScrapingService:
         semaphore = asyncio.Semaphore(max_concurrent_requests)
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            browser = await p.chromium.launch(headless=headless)
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/114.0"
             )

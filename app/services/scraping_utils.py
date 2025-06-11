@@ -1,13 +1,12 @@
 from typing import List, Dict, Optional
-from playwright.async_api import (
-    BrowserContext,
-    Page
-)
-from bs4 import BeautifulSoup
+from playwright.async_api import BrowserContext, Page
+from bs4 import BeautifulSoup, Tag
 import re
 import logging
 from models.car_platform import CarPlatform
 from services.car_data_parser import CarDataParser
+from datetime import datetime, timezone
+from schemas.scraped_car_schema import ScrapedCarItem
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -20,6 +19,7 @@ async def select_option_or_click(
     value: str,
     close_selector: Optional[str],
 ):
+    await page.wait_for_timeout(200)
     if close_selector:
         await close_popup(page, close_selector)
 
@@ -58,36 +58,44 @@ async def select_option_or_click(
         else:
             await page.locator(selector).first.click()
             if item_selector:
-                max_scroll_attempts = 10
+                max_scroll_attempts = 100
 
                 list_items = page.locator(item_selector)
 
-                parent_container = page.locator(f"{item_selector} >> xpath=.. >> xpath=..").first
+                parent_container = page.locator(
+                    f"{item_selector} >> xpath=.. >> xpath=.."
+                ).first
                 await parent_container.wait_for(timeout=5000)
 
                 for attempt in range(max_scroll_attempts):
                     try:
-
                         target = list_items.get_by_text(value, exact=False).first
-                        await target.scroll_into_view_if_needed(timeout=500)
+                        await target.scroll_into_view_if_needed(timeout=200)
                         is_visible = await target.is_visible()
                         if is_visible:
                             await target.click()
-                            logger.info(f"Clicked value '{value}' on attempt {attempt + 1}")
+                            logger.info(
+                                f"Clicked value '{value}' on attempt {attempt + 1}"
+                            )
                             break
                     except Exception:
                         if attempt == max_scroll_attempts - 1:
-
                             item_texts = await list_items.evaluate_all(
                                 "elements => elements.map(el => el.textContent.trim())"
                             )
-                            logger.error(f"Value '{value}' not found in {item_selector} after {max_scroll_attempts} attempts. Available items: {item_texts}")
-                            raise ValueError(f"Value '{value}' not found in {item_selector} after {max_scroll_attempts} attempts")
-                        
+                            logger.error(
+                                f"Value '{value}' not found in {item_selector} after {max_scroll_attempts} attempts. Available items: {item_texts}"
+                            )
+                            raise ValueError(
+                                f"Value '{value}' not found in {item_selector} after {max_scroll_attempts} attempts"
+                            )
+
                         await parent_container.evaluate(
-                            "element => element.scrollBy(0, 1000)"
+                            "element => element.scrollBy(0, 5000)"
                         )
-                        logger.debug(f"Scroll attempt {attempt + 1} for value '{value}'")
+                        logger.debug(
+                            f"Scroll attempt {attempt + 1} for value '{value}'"
+                        )
 
         if close_selector:
             await close_popup(page, close_selector)
@@ -134,56 +142,67 @@ async def scrape_car_list(
     except Exception as e:
         raise RuntimeError(f"Failed to scrape car list: {str(e)}")
 
+def find_by_muliple_selectors(soup: BeautifulSoup, selectors: str) -> Optional[Tag]:
+    list_selectors = selectors.split(",")
+    for selector in list_selectors:
+        element = soup.select_one(selector)
+        if element:
+            return element
+    return None
 
 async def scrape_car_details(
     page: Page,
     url: str,
     selectors: Dict[str, str],
-) -> Dict:
+) -> ScrapedCarItem | Dict[str, str]:
     try:
         await page.goto(url)
         html_content = await page.content()
         soup = BeautifulSoup(html_content, "html.parser")
 
-        data = {}
-
-        data["url"] = url
-
         # Extract year
-        year_element = soup.select_one(selectors["year"])
-        data["year"] = CarDataParser.parse_text_for_year(year_element)
+        # year_element = soup.select_one(selectors["year"])
+        year_element = find_by_muliple_selectors(soup, selectors["year"])
+        year = CarDataParser.parse_text_for_year(year_element)
 
         # Extract price
-        price_element = soup.select_one(selectors["price"])
+        price_element = find_by_muliple_selectors(soup, selectors["price"])
         price, currency = CarDataParser.parse_text_for_price(price_element)
-        data["price"] = price
-        data["currency"] = currency
 
         # Extract mileage
-        mileage_element = soup.select_one(selectors["mileage"])
+        mileage_element = find_by_muliple_selectors(soup, selectors["mileage"])
         mileage, mileage_unit = CarDataParser.parse_text_for_mileage(mileage_element)
-        data["mileage"] = mileage
-        data["mileage_unit"] = mileage_unit
 
         # Extract views with scrolling if needed
-        views_element = soup.select_one(selectors["views"])
+        views_element = find_by_muliple_selectors(soup, selectors["views"])
         if views_element:
-            data["views"] = CarDataParser.parse_text_for_views(views_element)
+            views = CarDataParser.parse_text_for_views(views_element)
         else:
             for _ in range(20):
                 await page.mouse.wheel(0, 300)
                 await page.wait_for_timeout(100)
                 html_content = await page.content()
                 soup = BeautifulSoup(html_content, "html.parser")
-                views_element = soup.select_one(selectors["views"])
+                views_element = find_by_muliple_selectors(soup, selectors["views"])
                 if views_element:
-                    data["views"] = CarDataParser.parse_text_for_views(views_element)
+                    views = CarDataParser.parse_text_for_views(views_element)
                     break
             else:
-                data["views"] = None
+                views = None
 
-        logger.info(f"Scraped data for {url}: {data}")
-        return data
+        scrape_car_data = ScrapedCarItem(
+            url=url,
+            year=year,
+            price=price,
+            currency=currency,
+            mileage=mileage,
+            mileage_unit=mileage_unit,
+            views=views,
+            scraped_at=datetime.now(timezone.utc),
+        )
+
+        logger.info(f"Scraped data for {url}: {scrape_car_data}")
+        return scrape_car_data
     except Exception as e:
         return {"url": url, "error": str(e)}
 
@@ -195,7 +214,7 @@ async def scrape_car_data(
     model: str,
     year_from: str,
     year_to: str,
-) -> List[Dict]:
+) -> list[ScrapedCarItem]:
     page: Optional[Page] = None
     try:
         logger.info(f"Scraping {brand} {model} on {car_platform.name}")
@@ -256,13 +275,14 @@ async def scrape_car_data(
             "mileage": car_platform.mileage_bs4_selector,
             "views": car_platform.views_bs4_selector,
         }
-        car_results = []
+
+        car_results: list[ScrapedCarItem] = []
         for url in car_urls[:10]:
             car_data = await scrape_car_details(page, url, selectors)
-            if "error" not in car_data:
-                car_results.append(car_data)
-            else:
+            if isinstance(car_data, dict) and "error" in car_data:
                 logger.warning(f"Failed to scrape car at {url}: {car_data['error']}")
+            elif isinstance(car_data, ScrapedCarItem) and car_data.year is not None and car_data.price is not None:
+                car_results.append(car_data)
 
         if not car_results:
             raise RuntimeError(f"No valid car data retrieved from {car_platform.name}")

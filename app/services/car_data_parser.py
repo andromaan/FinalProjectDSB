@@ -38,13 +38,15 @@ class CarDataParser:
         return price, currency
 
     @staticmethod
-    def parse_text_for_year(content_element) -> Optional[str]:
+    def parse_text_for_year(content_element) -> Optional[int]:
         year_text = content_element.get_text(strip=True) if content_element else None
         if year_text and ":" in year_text:
-            return year_text.split(':')[1].strip()
+            return int(year_text.split(':')[1].strip())
         elif year_text and " " in year_text:
-            return year_text.split(' ')[-1].strip()
-        return year_text
+            return int(year_text.split(' ')[-1].strip())
+        elif year_text and year_text.isdigit():
+            return int(year_text)
+        return None
 
     @staticmethod
     def parse_text_for_views(content_element) -> Optional[int]:

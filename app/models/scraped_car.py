@@ -30,4 +30,4 @@ class ScrapedCar(Base):
     status: Mapped[str] = mapped_column(String)
     error_message: Mapped[str] = mapped_column(Text, nullable=True)
 
-    scraped_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    scraped_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
