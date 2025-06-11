@@ -40,11 +40,13 @@ async def get_scraped_cars(
 async def list_scrape_requests(
     repo: ScrapingRepositoryDependency,
 ):
-    return await repo.list_scrape_requests()
+    scrape_requests = await repo.list_scrape_requests()
+    return [ScrapeRequestResponse.model_validate(r) for r in scrape_requests]
 
 @scraping_router.get("/scrape-request/{request_id}", response_model=ScrapeRequestResponse)
 async def get_scrape_request(
     request_id: int,
     repo: ScrapingRepositoryDependency,
 ):
-    return await repo.fetch_scrape_request(request_id)
+    scrape_request = await repo.fetch_scrape_request(request_id)
+    return ScrapeRequestResponse.model_validate(scrape_request)

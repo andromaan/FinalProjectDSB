@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from controllers.car_platform_controller import car_platform_router
 from controllers.scraping_controller import scraping_router
+from controllers.car_model_controller import car_model_router
 
 app = FastAPI()
 
@@ -17,6 +18,8 @@ app.add_middleware(
 app.include_router(car_platform_router)
 
 app.include_router(scraping_router)
+
+app.include_router(car_model_router)
 
 @app.get("/", include_in_schema=False)
 def redirect_to_docs():

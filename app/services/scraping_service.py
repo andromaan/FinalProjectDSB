@@ -11,7 +11,8 @@ from schemas.scraped_car_schema import (
     Summary,
     ScrapedCarCreate,
     ScrapingStatus,
-    ScrapedRequestCreate
+    ScrapedRequestCreate,
+    ScrapingConfig
 )
 from crud.scraping_repository import ScrapingRepositoryDependency
 from crud.car_platform_repository import CarPlatformRepositoryDependency
@@ -69,7 +70,9 @@ class ScrapingService:
                     )
 
                 time_to_scrape_platform = time.perf_counter() - start_time
-                logger.info(f"Scraped {car_platform.name} in {time_to_scrape_platform:.2f} seconds")
+                logger.info(
+                    f"Scraped {car_platform.name} in {time_to_scrape_platform:.2f} seconds"
+                )
 
                 # Return the first result for simplicity in results summary
                 return ScrapingResultSuccess(
@@ -118,15 +121,15 @@ class ScrapingService:
     ) -> ScrapingResults:
         all_marketplaces = await self.repo_car_platform.get_all_car_platforms()
 
-        if config.marketplace_ids:
+        if config.car_platform_ids:
             marketplace_map = {mp.id: mp for mp in all_marketplaces}
             chosen_car_platforms = [
                 mp
                 for mp_id, mp in marketplace_map.items()
-                if mp_id in config.marketplace_ids
+                if mp_id in config.car_platform_ids
             ]
-            if len(chosen_car_platforms) != len(config.marketplace_ids):
-                invalid_ids = set(config.marketplace_ids) - set(marketplace_map.keys())
+            if len(chosen_car_platforms) != len(config.car_platform_ids):
+                invalid_ids = set(config.car_platform_ids) - set(marketplace_map.keys())
                 raise HTTPException(
                     status_code=404,
                     detail=f"Marketplace(s) with ID(s) {invalid_ids} not found",
@@ -179,36 +182,40 @@ class ScrapingService:
             scrape_request_id=scraping_request.id,
             brand_searched=config.brand,
             model_searched=config.model,
+            year_from_searched=config.year_from,
+            year_to_searched=config.year_to,
             results=results,
             summary=summary,
         )
 
-    # async def scrape_car_with_model(
-    #     self, config: ScrapingConfigCar
+    # async def scrape_car_with_models(
+    #     self, config: ScrapingConfig, headless: bool = True
     # ) -> ScrapingResults:
-    #     all_marketplaces = await self.repo_car_platform.get_all_car_platforms()
+    #     all_car_platforms = await self.repo_car_platform.get_all_car_platforms()
 
-    #     if config.marketplace_ids:
-    #         marketplace_map = {mp.id: mp for mp in all_marketplaces}
-    #         selected_marketplaces = [
+    #     if config.car_platform_ids:
+    #         car_platform_map = {mp.id: mp for mp in all_car_platforms}
+    #         chosen_car_platforms = [
     #             mp
-    #             for mp_id, mp in marketplace_map.items()
-    #             if mp_id in config.marketplace_ids
+    #             for mp_id, mp in car_platform_map.items()
+    #             if mp_id in config.car_platform_ids
     #         ]
-    #         if len(selected_marketplaces) != len(config.marketplace_ids):
-    #             invalid_ids = set(config.marketplace_ids) - set(marketplace_map.keys())
+    #         if len(chosen_car_platforms) != len(config.car_platform_ids):
+    #             invalid_ids = set(config.car_platform_ids) - set(car_platform_map.keys())
     #             raise HTTPException(
     #                 status_code=404,
     #                 detail=f"Marketplace(s) with ID(s) {invalid_ids} not found",
     #             )
     #     else:
-    #         selected_marketplaces = all_marketplaces
+    #         chosen_car_platforms = all_car_platforms
+
+        
+
 
     #     results: List[ScrapingResultSuccess | ScrapingResultError] = []
     #     scraping_request = await self.repo_scraping.add_scrape_request(
     #         ScrapedRequestCreate(
-    #             car_id=None,
-    #             search_query=None,
+    #             search_query=f"{config.brand} {config.model} {config.year_from}-{config.year_to}",
     #         )
     #     )
 
@@ -216,7 +223,7 @@ class ScrapingService:
     #     semaphore = asyncio.Semaphore(max_concurrent_requests)
 
     #     async with async_playwright() as p:
-    #         browser = await p.chromium.launch(headless=False)
+    #         browser = await p.chromium.launch(headless=headless)
     #         context = await browser.new_context(
     #             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/114.0"
     #         )
@@ -224,12 +231,12 @@ class ScrapingService:
     #         tasks = [
     #             self.scrape_single_marketplace(
     #                 context=context,
-    #                 marketplace=marketplace,
+    #                 car_platform=car_platform,
     #                 config=config,
     #                 scrape_request_id=scraping_request.id,
     #                 semaphore=semaphore,
     #             )
-    #             for marketplace in selected_marketplaces
+    #             for car_platform in chosen_car_platforms
     #         ]
     #         results = await asyncio.gather(*tasks, return_exceptions=False)
 

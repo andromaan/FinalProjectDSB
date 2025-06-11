@@ -34,11 +34,16 @@ class ScrapingConfigQuery(BaseModel):
     model: str
     year_from: str
     year_to: str
-    marketplace_ids: Optional[List[int]] = None
+    car_platform_ids: Optional[List[int]] = None
+
+class ScrapingConfig(BaseModel):
+    car_ids: Optional[List[int]] = None
+    car_platform_ids: Optional[List[int]] = None
+
 
 class ScrapingConfigCar(BaseModel):
     car_id: int
-    marketplace_ids: Optional[List[int]] = None
+    car_platform_ids: Optional[List[int]] = None
 
 
 class ScrapingResultSuccess(BaseModel):
@@ -65,6 +70,8 @@ class ScrapingResults(BaseModel):
     scrape_request_id: int
     brand_searched: str
     model_searched: str
+    year_from_searched: str
+    year_to_searched: str
     results: List[ScrapingResultSuccess | ScrapingResultError]
     summary: Summary
 

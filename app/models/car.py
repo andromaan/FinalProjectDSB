@@ -11,7 +11,8 @@ class Car(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     brand: Mapped[str] = mapped_column(String)
     model: Mapped[str] = mapped_column(String)
-    year_range: Mapped[str] = mapped_column(String)
+    year_from: Mapped[int] = mapped_column(Integer)
+    year_to: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

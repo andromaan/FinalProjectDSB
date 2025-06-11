@@ -2,20 +2,15 @@ import asyncio
 from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 import re
-import logging
 
 async def select_option_or_click(page, selector, item_selector, value, close_selector):
     if close_selector:
         await close_popup(page, close_selector)
-
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
-
-    await page.wait_for_selector(selector, state="visible")
     element = await page.locator(selector).first.element_handle()
     tag_name = await element.evaluate("el => el.tagName.toLowerCase()")
     
     if tag_name == "select":
+        await page.wait_for_selector(selector, state="visible")
         await page.wait_for_selector(f"{selector} option", state="attached", timeout=10000)
         
         options = await page.locator(selector).evaluate(
@@ -46,38 +41,14 @@ async def select_option_or_click(page, selector, item_selector, value, close_sel
         await page.locator(selector).first.fill(value)
         await page.locator(selector).first.press("Enter")
     else:
+        await page.wait_for_selector(selector, state="visible")
         await page.locator(selector).first.click()
-        if item_selector:
-            max_scroll_attempts = 10
-
-            list_items = page.locator(item_selector)
-
-            parent_container = page.locator(f"{item_selector} >> xpath=.. >> xpath=..").first
-            await parent_container.wait_for(timeout=5000)
-
-            for attempt in range(max_scroll_attempts):
-                try:
-
-                    target = list_items.get_by_text(value, exact=False).first
-                    await target.scroll_into_view_if_needed(timeout=500)
-                    is_visible = await target.is_visible()
-                    if is_visible:
-                        await target.click()
-                        logger.info(f"Clicked value '{value}' on attempt {attempt + 1}")
-                        break
-                except Exception:
-                    if attempt == max_scroll_attempts - 1:
-
-                        item_texts = await list_items.evaluate_all(
-                            "elements => elements.map(el => el.textContent.trim())"
-                        )
-                        logger.error(f"Value '{value}' not found in {item_selector} after {max_scroll_attempts} attempts. Available items: {item_texts}")
-                        raise ValueError(f"Value '{value}' not found in {item_selector} after {max_scroll_attempts} attempts")
-                    
-                    await parent_container.evaluate(
-                        "element => element.scrollBy(0, 1000)"
-                    )
-                    logger.debug(f"Scroll attempt {attempt + 1} for value '{value}'")
+        await (
+            page.locator(item_selector)
+            .get_by_text(re.compile(f"^{re.escape(value)}$", re.IGNORECASE))
+            .first.click()
+        )
+        
 
     if close_selector:
         await close_popup(page, close_selector)
@@ -212,9 +183,8 @@ async def scrape_car_details(page, url, selectors, search_position):
 
     return data
 
-async def scrape_car_list(page, car_list_selector, url_to_details, base_url, button_selector):
+async def scrape_car_list(page, car_list_selector, url_to_details, base_url=None):
     car_urls = []
-    await page.wait_for_timeout(500) if button_selector is None else 0
     await page.wait_for_selector(car_list_selector, state="visible")
     elements = await page.locator(f"{car_list_selector} {url_to_details}").all()
     for element in elements:
@@ -256,44 +226,44 @@ async def main():
         page = await context.new_page()
 
         try:
-            base_url = "https://rst.ua/ukr/"
+            base_url = "https://auto.ria.com/uk/legkovie/"
             await page.goto(base_url)
 
-            brand_selector = 'select.form-select#sf-make'
-            brand_item_selector = None
+            brand_selector = 'label[for="brandTooltipBrandAutocompleteInput-1"]'
+            brand_item_selector = 'div#brandTooltipBrandAutocomplete-1 li.list-item a.item'
+            
+            model_selector = 'label[for="brandTooltipModelAutocompleteInput-1"]'
+            model_item_selector = 'div#brandTooltipModelAutocomplete-1 li.list-item a.item'
+            
+            year_from_selector = 'div.e-year div.middle select#year'
+            year_from_item_selector = 'div.e-year div.middle select#year option'
 
-            model_selector = 'select.form-select#sf-model'
-            model_item_selector = None
+            year_to_selector = 'div.e-year div.middle select#yearTo'
+            year_to_item_selector = 'div.e-year div.middle select#yearTo option'
+            
+            button_selector = 'div.footbar-search__main button[type="submit"]'
 
-            year_from_selector = 'select.form-select[i="5"]'
-            year_from_item_selector = None
+            car_list_selector = 'div#searchResults'
+            url_to_details = 'a.address'
 
-            year_to_selector = 'select.form-select[i="6"]'
-            year_to_item_selector = None
-
-            button_selector = None
-
-            car_list_selector = 'div#p-1.page.bg-body'
-            url_to_details = 'article div.t a.ai'
-
-            close_selector = None
+            close_selector = ''
 
             selectors = {
-                'year': 'ul.list-unstyled li[title="рік"] a',
-                'price': 'div.align-items-start div.pr b',
-                'mileage': 'ul.list-unstyled li[title="пробiг"]',
-                'views': 'div.bgs i.in.text-body'
+                'year': 'div.heading > h1.head',
+                'price': 'section.price > div.price_value strong',
+                'mileage': 'div.base-information.bold',
+                'views': 'aside li#viewsStatistic > span.bold.load'
             }
 
-            await select_option_or_click(page, brand_selector, brand_item_selector, "Audi", close_selector)
-            await select_option_or_click(page, model_selector, model_item_selector, "A4", close_selector)
-            await select_option_or_click(page, year_from_selector, year_from_item_selector, "2018", close_selector)
-            await select_option_or_click(page, year_to_selector, year_to_item_selector, "2020", close_selector)
+            await select_option_or_click(page, brand_selector, brand_item_selector, "Volkswagen", close_selector)
+            await select_option_or_click(page, model_selector, model_item_selector, "golf", close_selector)
+            await select_option_or_click(page, year_from_selector, year_from_item_selector, "2014", close_selector)
+            await select_option_or_click(page, year_to_selector, year_to_item_selector, "2019", close_selector)
 
             if button_selector:
                 await page.locator(button_selector).click()
 
-            car_urls = await scrape_car_list(page, car_list_selector, url_to_details, base_url, button_selector)
+            car_urls = await scrape_car_list(page, car_list_selector, url_to_details, base_url)
             car_list = []
 
             search_position = 1

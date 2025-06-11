@@ -66,7 +66,7 @@ async def select_option_or_click(
 
                 for attempt in range(max_scroll_attempts):
                     try:
-                        target = list_items.get_by_text(value, exact=False).first
+                        target = list_items.get_by_text(re.compile(f"^{re.escape(value)}$", re.IGNORECASE)).first
                         await target.scroll_into_view_if_needed(timeout=200)
                         is_visible = await target.is_visible()
                         if is_visible:
