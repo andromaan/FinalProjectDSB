@@ -6,6 +6,8 @@ from schemas.scraped_car_schema import (
     ScrapedRequestResponse,
     ScrapeRequestResponse,
     ScrapingConfigByCarModel,
+    ScrapingConfigByCarsModel,
+    ScrapingResultsByCarModels
 )
 from crud.scraping_repository import ScrapingRepositoryDependency
 from crud.car_model_repository import CarModelRepositoryDependency
@@ -42,6 +44,15 @@ async def scrape_cars_by_car_model(
         car_platform_ids=config.car_platform_ids
     ), headless=headless, car_id=car_model.id)
 
+@scraping_router.post(
+    "/scrape-cars-by-cars-models/{headless}", response_model=ScrapingResultsByCarModels
+)
+async def scrape_cars_by_cars_models(
+    service: ScrapingServiceDependency,
+    config: ScrapingConfigByCarsModel,
+    headless: bool = True,
+):
+    return await service.scrape_cars(config, headless=headless)
 
 @scraping_router.get("/scraped-cars", response_model=list[ScrapedRequestResponse])
 async def get_scraped_cars(
