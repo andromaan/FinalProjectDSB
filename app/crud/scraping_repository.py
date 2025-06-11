@@ -36,21 +36,23 @@ class ScrapingRepository:
 
     async def fetch_scraped_cars(
         self,
+        id: int | None = None,
         car_id: int | None = None,
         req_id: int | None = None,
-        market_id: int | None = None,
+        car_platform_id: int | None = None,
     ) -> List[ScrapedCar]:
         stmt = select(ScrapedCar)
+        if id is not None:
+            stmt = stmt.where(ScrapedCar.id == id)
         if car_id is not None:
-            stmt = stmt.where(ScrapedCar.id == car_id)
-        else:
-            if req_id is not None:
-                stmt = stmt.where(ScrapedCar.request_id == req_id)
-            if market_id is not None:
-                stmt = stmt.where(ScrapedCar.marketplace_id == market_id)
+            stmt = stmt.where(ScrapedCar.car_id == car_id)
+        if req_id is not None:
+            stmt = stmt.where(ScrapedCar.request_id == req_id)
+        if car_platform_id is not None:
+            stmt = stmt.where(ScrapedCar.car_platform_id == car_platform_id)
         result = await self.session.execute(stmt)
         cars = result.scalars().all()
-        if car_id is not None and not cars:
+        if id is not None and not cars:
             raise HTTPException(status_code=404, detail="Scraped car not found")
         return list(cars)
 

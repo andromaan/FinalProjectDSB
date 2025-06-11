@@ -1,9 +1,7 @@
 from typing import List, Dict, Optional
 from playwright.async_api import (
     BrowserContext,
-    Page,
-    TimeoutError,
-    Error as PlaywrightError,
+    Page
 )
 from bs4 import BeautifulSoup
 import re
@@ -184,6 +182,7 @@ async def scrape_car_details(
             else:
                 data["views"] = None
 
+        logger.info(f"Scraped data for {url}: {data}")
         return data
     except Exception as e:
         return {"url": url, "error": str(e)}

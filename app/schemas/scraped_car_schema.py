@@ -80,3 +80,29 @@ class ScrapingResults(BaseModel):
 class ScrapedRequestCreate(BaseModel):
     car_id: Optional[int] = None
     search_query: Optional[str] = None
+
+class ScrapedRequestResponse(BaseModel):
+    id: int
+    car_platform_id: int
+    car_id: Optional[int] = None
+    request_id: int
+    scraped_url: Optional[str] = None
+    search_position: Optional[int] = None
+    scraped_year: Optional[int] = None
+    scraped_price: Optional[int] = None
+    scraped_currency: Optional[str] = None
+    scraped_mileage: Optional[int] = None
+    scraped_mileage_unit: Optional[str] = None
+    scraped_number_of_views: Optional[int] = None
+    status: str
+    error_message: Optional[str] = None
+    scraped_at: datetime
+
+class ScrapeRequestResponse(BaseModel):
+    id: int
+    car_id: Optional[int] = None
+    search_query: Optional[str] = None
+    requested_at: datetime
+
+    class Config:
+        orm_mode = True

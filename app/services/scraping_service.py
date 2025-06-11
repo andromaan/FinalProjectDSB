@@ -11,8 +11,7 @@ from schemas.scraped_car_schema import (
     Summary,
     ScrapedCarCreate,
     ScrapingStatus,
-    ScrapedRequestCreate,
-    ScrapingConfigCar,
+    ScrapedRequestCreate
 )
 from crud.scraping_repository import ScrapingRepositoryDependency
 from crud.car_platform_repository import CarPlatformRepositoryDependency
