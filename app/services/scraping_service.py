@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import asyncio
 from playwright.async_api import async_playwright
 from schemas.scraped_car_schema import (
-    ScrapingConfigQuery,
+    ScrapingConfigByQuery,
     ScrapingResultSuccess,
     ScrapingResultError,
     ScrapingResults,
@@ -12,10 +12,11 @@ from schemas.scraped_car_schema import (
     ScrapedCarCreate,
     ScrapingStatus,
     ScrapedRequestCreate,
-    ScrapingConfig
+    ScrapingConfigByCarModel,
 )
 from crud.scraping_repository import ScrapingRepositoryDependency
 from crud.car_platform_repository import CarPlatformRepositoryDependency
+from crud.car_model_repository import CarModelRepositoryDependency
 from services.scraping_utils import scrape_car_data
 import time
 from services.logger_service import logger
@@ -26,15 +27,17 @@ class ScrapingService:
         self,
         repo_car_platform: CarPlatformRepositoryDependency,
         repo_scraping: ScrapingRepositoryDependency,
+        repo_car_model: CarModelRepositoryDependency,
     ):
         self.repo_car_platform = repo_car_platform
         self.repo_scraping = repo_scraping
+        self.repo_car_model = repo_car_model
 
     async def scrape_single_marketplace(
         self,
         context,
         car_platform,
-        config: ScrapingConfigQuery,
+        config: ScrapingConfigByQuery,
         scrape_request_id: int,
         semaphore: asyncio.Semaphore,
     ) -> ScrapingResultSuccess | ScrapingResultError:
@@ -116,8 +119,8 @@ class ScrapingService:
                     scraped_at=datetime.now(timezone.utc),
                 )
 
-    async def scrape_car_with_query(
-        self, config: ScrapingConfigQuery, headless: bool = True
+    async def scrape_car(
+        self, config: ScrapingConfigByQuery, headless: bool = True
     ) -> ScrapingResults:
         all_marketplaces = await self.repo_car_platform.get_all_car_platforms()
 
@@ -188,86 +191,16 @@ class ScrapingService:
             summary=summary,
         )
 
-    # async def scrape_car_with_models(
-    #     self, config: ScrapingConfig, headless: bool = True
-    # ) -> ScrapingResults:
-    #     all_car_platforms = await self.repo_car_platform.get_all_car_platforms()
-
-    #     if config.car_platform_ids:
-    #         car_platform_map = {mp.id: mp for mp in all_car_platforms}
-    #         chosen_car_platforms = [
-    #             mp
-    #             for mp_id, mp in car_platform_map.items()
-    #             if mp_id in config.car_platform_ids
-    #         ]
-    #         if len(chosen_car_platforms) != len(config.car_platform_ids):
-    #             invalid_ids = set(config.car_platform_ids) - set(car_platform_map.keys())
-    #             raise HTTPException(
-    #                 status_code=404,
-    #                 detail=f"Marketplace(s) with ID(s) {invalid_ids} not found",
-    #             )
-    #     else:
-    #         chosen_car_platforms = all_car_platforms
-
-        
-
-
-    #     results: List[ScrapingResultSuccess | ScrapingResultError] = []
-    #     scraping_request = await self.repo_scraping.add_scrape_request(
-    #         ScrapedRequestCreate(
-    #             search_query=f"{config.brand} {config.model} {config.year_from}-{config.year_to}",
-    #         )
-    #     )
-
-    #     max_concurrent_requests = 4
-    #     semaphore = asyncio.Semaphore(max_concurrent_requests)
-
-    #     async with async_playwright() as p:
-    #         browser = await p.chromium.launch(headless=headless)
-    #         context = await browser.new_context(
-    #             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/114.0"
-    #         )
-
-    #         tasks = [
-    #             self.scrape_single_marketplace(
-    #                 context=context,
-    #                 car_platform=car_platform,
-    #                 config=config,
-    #                 scrape_request_id=scraping_request.id,
-    #                 semaphore=semaphore,
-    #             )
-    #             for car_platform in chosen_car_platforms
-    #         ]
-    #         results = await asyncio.gather(*tasks, return_exceptions=False)
-
-    #         await context.close()
-    #         await browser.close()
-
-    #     summary = Summary(
-    #         total_marketplaces_processed=len(results),
-    #         successful_scrapes=sum(
-    #             1 for r in results if isinstance(r, ScrapingResultSuccess)
-    #         ),
-    #         failed_scrapes=sum(
-    #             1 for r in results if isinstance(r, ScrapingResultError)
-    #         ),
-    #     )
-
-    #     return ScrapingResults(
-    #         scrape_request_id=scraping_request.id,
-    #         brand_searched=config.brand,
-    #         model_searched=config.model,
-    #         results=results,
-    #         summary=summary,
-    #     )
-
 
 def get_scraping_service(
     repo_car_platform: CarPlatformRepositoryDependency,
     repo_scraping: ScrapingRepositoryDependency,
+    repo_car_model: CarModelRepositoryDependency,
 ):
     return ScrapingService(
-        repo_car_platform=repo_car_platform, repo_scraping=repo_scraping
+        repo_car_platform=repo_car_platform,
+        repo_scraping=repo_scraping,
+        repo_car_model=repo_car_model,
     )
 
 

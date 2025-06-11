@@ -29,22 +29,17 @@ class ScrapedCarCreate(BaseModel):
     error_message: Optional[str]
 
 
-class ScrapingConfigQuery(BaseModel):
+class ScrapingConfigByQuery(BaseModel):
     brand: str
     model: str
     year_from: str
     year_to: str
     car_platform_ids: Optional[List[int]] = None
 
-class ScrapingConfig(BaseModel):
-    car_ids: Optional[List[int]] = None
-    car_platform_ids: Optional[List[int]] = None
 
-
-class ScrapingConfigCar(BaseModel):
+class ScrapingConfigByCarModel(BaseModel):
     car_id: int
     car_platform_ids: Optional[List[int]] = None
-
 
 class ScrapingResultSuccess(BaseModel):
     marketplace_name: str
@@ -80,6 +75,7 @@ class ScrapedRequestCreate(BaseModel):
     car_id: Optional[int] = None
     search_query: Optional[str] = None
 
+
 class ScrapedRequestResponse(BaseModel):
     id: int
     car_platform_id: int
@@ -97,6 +93,7 @@ class ScrapedRequestResponse(BaseModel):
     error_message: Optional[str] = None
     scraped_at: datetime
 
+
 class ScrapeRequestResponse(BaseModel):
     id: int
     car_id: Optional[int] = None
@@ -105,6 +102,7 @@ class ScrapeRequestResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
 
 class ScrapedCarItem(BaseModel):
     url: str
