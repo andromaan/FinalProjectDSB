@@ -253,6 +253,7 @@ class ScrapingService:
                 contexts[car.id] = context
                 scraping_request = await self.repo_scraping.add_scrape_request(
                     ScrapedRequestCreate(
+                        car_id=car.id,
                         search_query=f"{car.brand} {car.model} {car.year_from}-{car.year_to}",
                     )
                 )
