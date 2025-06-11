@@ -40,7 +40,7 @@ async def scrape_cars_by_car_model(
         year_from=str(car_model.year_from),
         year_to=str(car_model.year_to),
         car_platform_ids=config.car_platform_ids
-    ), headless=headless)
+    ), headless=headless, car_id=car_model.id)
 
 
 @scraping_router.get("/scraped-cars", response_model=list[ScrapedRequestResponse])

@@ -1,4 +1,4 @@
-from typing import List, Annotated
+from typing import List, Annotated, Optional
 from fastapi import HTTPException, Depends
 from datetime import datetime, timezone
 import asyncio
@@ -12,7 +12,6 @@ from schemas.scraped_car_schema import (
     ScrapedCarCreate,
     ScrapingStatus,
     ScrapedRequestCreate,
-    ScrapingConfigByCarModel,
 )
 from crud.scraping_repository import ScrapingRepositoryDependency
 from crud.car_platform_repository import CarPlatformRepositoryDependency
@@ -120,7 +119,7 @@ class ScrapingService:
                 )
 
     async def scrape_car(
-        self, config: ScrapingConfigByQuery, headless: bool = True
+        self, config: ScrapingConfigByQuery, headless: bool = True, car_id: Optional[int] = None
     ) -> ScrapingResults:
         all_marketplaces = await self.repo_car_platform.get_all_car_platforms()
 
@@ -143,6 +142,7 @@ class ScrapingService:
         results: List[ScrapingResultSuccess | ScrapingResultError] = []
         scraping_request = await self.repo_scraping.add_scrape_request(
             ScrapedRequestCreate(
+                car_id=car_id,
                 search_query=f"{config.brand} {config.model} {config.year_from}-{config.year_to}",
             )
         )
