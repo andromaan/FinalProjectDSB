@@ -60,6 +60,7 @@ class ScrapingService:
                         car_data=ScrapedCarCreate(
                             request_id=scrape_request_id,
                             car_platform_id=car_platform.id,
+                            car_id=car_id,
                             scraped_url=car_data.url,
                             search_position=search_position,
                             scraped_year=car_data.year,
@@ -103,6 +104,7 @@ class ScrapingService:
                     car_data=ScrapedCarCreate(
                         request_id=scrape_request_id,
                         car_platform_id=car_platform.id,
+                        car_id=car_id,
                         scraped_url=None,
                         search_position=None,
                         scraped_year=None,

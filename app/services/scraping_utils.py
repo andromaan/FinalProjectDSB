@@ -16,7 +16,7 @@ async def select_option_or_click(
     value: str,
     close_selector: Optional[str],
 ):
-    await page.wait_for_timeout(200)
+    await page.wait_for_timeout(300)
     if close_selector:
         await close_popup(page, close_selector)
 
@@ -106,7 +106,6 @@ async def close_popup(page: Page, close_selector: str):
         close_btn = page.locator(close_selector)
         await close_btn.wait_for(state="visible", timeout=3000)
         await close_btn.click()
-        await page.wait_for_timeout(100)
     except Exception:
         pass
 

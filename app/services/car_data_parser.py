@@ -41,21 +41,24 @@ class CarDataParser:
     def parse_text_for_year(content_element) -> Optional[int]:
         year_text = content_element.get_text(strip=True) if content_element else None
         if year_text and ":" in year_text:
-            return int(year_text.split(':')[1].strip())
+            digits = ''.join(c for c in year_text if c.isdigit())
+            return int(digits) if digits else None
         elif year_text and " " in year_text:
-            return int(year_text.split(' ')[-1].strip())
+            digits = ''.join(c for c in year_text if c.isdigit())
+            return int(digits) if digits else None
         elif year_text and year_text.isdigit():
             return int(year_text)
         return None
 
     @staticmethod
     def parse_text_for_views(content_element) -> Optional[int]:
-        text = content_element.get_text(strip=True) if content_element else None
-        if content_element and len(content_element.contents) > 1:
-            return int(content_element.contents[1])
+        text = content_element.get_text(strip=True)
+        if content_element and len(content_element.contents) > 1 and " " not in text:
+            digits = ''.join(c for c in text if c.isdigit())
+            return int(digits) if digits else None
         elif text and " " in text:
-            parsed_text = text.split(' ')[1].strip()
-            return int(parsed_text) if parsed_text.isdigit() else None
+            digits = ''.join(c for c in text if c.isdigit())
+            return int(digits) if digits else None
         return int(text.strip()) if text else None
 
     @staticmethod
