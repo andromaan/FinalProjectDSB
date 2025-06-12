@@ -15,6 +15,7 @@ async def select_option_or_click(
     item_selector: Optional[str],
     value: str,
     close_selector: Optional[str],
+    is_selector_brand: bool = False,
 ):
     await page.wait_for_timeout(300)
     if close_selector:
@@ -67,13 +68,14 @@ async def select_option_or_click(
                 for attempt in range(max_scroll_attempts):
                     try:
                         target = list_items.get_by_text(re.compile(f"^{re.escape(value)}$", re.IGNORECASE)).first
+
+                        if is_selector_brand:
+                            target = list_items.get_by_text(re.compile(re.escape(value), re.IGNORECASE)).first
+                            
                         await target.scroll_into_view_if_needed(timeout=200)
                         is_visible = await target.is_visible()
                         if is_visible:
                             await target.click()
-                            logger.info(
-                                f"Clicked value '{value}' on attempt {attempt + 1}"
-                            )
                             break
                     except Exception:
                         if attempt == max_scroll_attempts - 1:
@@ -89,9 +91,6 @@ async def select_option_or_click(
 
                         await parent_container.evaluate(
                             "element => element.scrollBy(0, 5000)"
-                        )
-                        logger.debug(
-                            f"Scroll attempt {attempt + 1} for value '{value}'"
                         )
 
         if close_selector:
@@ -225,6 +224,7 @@ async def scrape_car_data(
             car_platform.brand_item_selector,
             brand,
             car_platform.close_selector,
+            is_selector_brand=True,
         )
         await select_option_or_click(
             page,

@@ -28,6 +28,9 @@ class CarDataParser:
         elif 'грн' in text.lower():
             currency = 'грн'
             text = text.lower().replace('грн', '').strip()
+        elif '₴' in text:
+            currency = '₴'
+            text = text.replace('₴', '').strip()
 
         try:
             price = ''.join(c for c in text if c.isdigit())

@@ -34,17 +34,17 @@ class ScrapingConfigByQuery(BaseModel):
     model: str
     year_from: str
     year_to: str
-    car_platform_ids: Optional[List[int]] = None
+    car_platform_ids: List[int]
 
 
 class ScrapingConfigByCarModel(BaseModel):
     car_id: int
-    car_platform_ids: Optional[List[int]] = None
+    car_platform_ids: List[int]
 
 
 class ScrapingConfigByCarsModel(BaseModel):
-    car_ids: Optional[List[int]] = None
-    car_platform_ids: Optional[List[int]] = None
+    car_ids: List[int]
+    car_platform_ids: List[int]
 
 
 class ScrapingResultSuccess(BaseModel):
