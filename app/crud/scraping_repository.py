@@ -8,6 +8,7 @@ from schemas.scraped_car_schema import (
 )
 from models.scraped_car import ScrapedCar
 from models.scrape_request import ScrapeRequest
+from datetime import datetime
 
 class ScrapingRepository:
     def __init__(self, session: SessionContext):
@@ -40,6 +41,8 @@ class ScrapingRepository:
         car_id: int | None = None,
         req_id: int | None = None,
         car_platform_id: int | None = None,
+        date_of_scrape_from: datetime | None = None,
+        date_of_scrape_to: datetime | None = None,
     ) -> List[ScrapedCar]:
         stmt = select(ScrapedCar)
         if id is not None:
@@ -50,6 +53,10 @@ class ScrapingRepository:
             stmt = stmt.where(ScrapedCar.request_id == req_id)
         if car_platform_id is not None:
             stmt = stmt.where(ScrapedCar.car_platform_id == car_platform_id)
+        if date_of_scrape_from is not None:
+            stmt = stmt.where(ScrapedCar.scraped_at >= date_of_scrape_from)
+        if date_of_scrape_to is not None:
+            stmt = stmt.where(ScrapedCar.scraped_at <= date_of_scrape_to)
         result = await self.session.execute(stmt)
         cars = result.scalars().all()
         if id is not None and not cars:

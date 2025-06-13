@@ -12,6 +12,7 @@ from schemas.scraped_car_schema import (
 from crud.scraping_repository import ScrapingRepositoryDependency
 from crud.car_model_repository import CarModelRepositoryDependency
 from typing import Annotated
+from datetime import datetime
 
 scraping_router = APIRouter(prefix="/scraping", tags=["scraping"])
 
@@ -61,9 +62,12 @@ async def get_scraped_cars(
     car_id: Annotated[int | None, Query()] = None,
     req_id: Annotated[int | None, Query()] = None,
     car_platform_id: Annotated[int | None, Query()] = None,
+    date_of_scrape_from: Annotated[datetime | None, Query()] = None,
+    date_of_scrape_to: Annotated[datetime | None, Query()] = None,
 ):
     return await repo.fetch_scraped_cars(
-        id=id, car_id=car_id, req_id=req_id, car_platform_id=car_platform_id
+        id=id, car_id=car_id, req_id=req_id, car_platform_id=car_platform_id,
+        date_of_scrape_from=date_of_scrape_from, date_of_scrape_to=date_of_scrape_to
     )
 
 

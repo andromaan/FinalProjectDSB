@@ -97,6 +97,7 @@ async def select_option_or_click(
             await close_popup(page, close_selector)
 
     except Exception as e:
+        logger.error(f"Error occurred while interacting with selector {selector}: {str(e)}")
         raise RuntimeError(f"Failed to interact with selector {selector}: {str(e)}")
 
 
@@ -135,6 +136,7 @@ async def scrape_car_list(
                 car_urls.append(url)
         return car_urls
     except Exception as e:
+        logger.error(f"Error occurred while scraping car list: {str(e)}")
         raise RuntimeError(f"Failed to scrape car list: {str(e)}")
 
 def find_by_muliple_selectors(soup: BeautifulSoup, selectors: str) -> Optional[Tag]:
@@ -144,6 +146,32 @@ def find_by_muliple_selectors(soup: BeautifulSoup, selectors: str) -> Optional[T
         if element:
             return element
     return None
+
+async def validate_views(views_element: Optional[Tag], page: Page, selectors: Dict[str, str]) -> Optional[int]:
+    if views_element:
+            views = CarDataParser.parse_text_for_views(views_element)
+    else:
+        for _ in range(20):
+            await page.mouse.wheel(0, 300)
+            await page.wait_for_timeout(100)
+            html_content = await page.content()
+            soup = BeautifulSoup(html_content, "html.parser")
+            views_element = find_by_muliple_selectors(soup, selectors["views"])
+            if views_element:
+                views = CarDataParser.parse_text_for_views(views_element)
+                break
+        else:
+            views = None
+    
+    if views == 0:
+        await page.wait_for_timeout(3000)
+        html_content = await page.content()
+        soup = BeautifulSoup(html_content, "html.parser")
+        views = CarDataParser.parse_text_for_views(
+            find_by_muliple_selectors(soup, selectors["views"])
+            )
+        
+    return views
 
 async def scrape_car_details(
     page: Page,
@@ -156,7 +184,6 @@ async def scrape_car_details(
         soup = BeautifulSoup(html_content, "html.parser")
 
         # Extract year
-        # year_element = soup.select_one(selectors["year"])
         year_element = find_by_muliple_selectors(soup, selectors["year"])
         year = CarDataParser.parse_text_for_year(year_element)
 
@@ -170,20 +197,8 @@ async def scrape_car_details(
 
         # Extract views with scrolling if needed
         views_element = find_by_muliple_selectors(soup, selectors["views"])
-        if views_element:
-            views = CarDataParser.parse_text_for_views(views_element)
-        else:
-            for _ in range(20):
-                await page.mouse.wheel(0, 300)
-                await page.wait_for_timeout(100)
-                html_content = await page.content()
-                soup = BeautifulSoup(html_content, "html.parser")
-                views_element = find_by_muliple_selectors(soup, selectors["views"])
-                if views_element:
-                    views = CarDataParser.parse_text_for_views(views_element)
-                    break
-            else:
-                views = None
+
+        views = await validate_views(views_element, page, selectors)            
 
         scrape_car_data = ScrapedCarItem(
             url=url,
