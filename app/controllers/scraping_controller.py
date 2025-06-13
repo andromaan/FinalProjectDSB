@@ -7,12 +7,14 @@ from schemas.scraped_car_schema import (
     ScrapeRequestResponse,
     ScrapingConfigByCarModel,
     ScrapingConfigByCarsModel,
-    ScrapingResultsByCarModels
+    ScrapingResultsByCarModels,
+    ScrapedCarQuery,
 )
 from crud.scraping_repository import ScrapingRepositoryDependency
 from crud.car_model_repository import CarModelRepositoryDependency
+from services.csv_service import CSVServiceDependency
 from typing import Annotated
-from datetime import datetime
+from fastapi.responses import StreamingResponse
 
 scraping_router = APIRouter(prefix="/scraping", tags=["scraping"])
 
@@ -37,13 +39,18 @@ async def scrape_cars_by_car_model(
 ):
     car_model = await car_repo.get_car_model_by_id(config.car_id)
 
-    return await service.scrape_car(ScrapingConfigByQuery(
-        brand=car_model.brand,
-        model=car_model.model,
-        year_from=str(car_model.year_from),
-        year_to=str(car_model.year_to),
-        car_platform_ids=config.car_platform_ids
-    ), headless=headless, car_id=car_model.id)
+    return await service.scrape_car(
+        ScrapingConfigByQuery(
+            brand=car_model.brand,
+            model=car_model.model,
+            year_from=str(car_model.year_from),
+            year_to=str(car_model.year_to),
+            car_platform_ids=config.car_platform_ids,
+        ),
+        headless=headless,
+        car_id=car_model.id,
+    )
+
 
 @scraping_router.post(
     "/scrape-cars-by-cars-models/{headless}", response_model=ScrapingResultsByCarModels
@@ -55,19 +62,19 @@ async def scrape_cars_by_cars_models(
 ):
     return await service.scrape_cars(config, headless=headless)
 
+
 @scraping_router.get("/scraped-cars", response_model=list[ScrapedRequestResponse])
 async def get_scraped_cars(
     repo: ScrapingRepositoryDependency,
-    id: Annotated[int | None, Query()] = None,
-    car_id: Annotated[int | None, Query()] = None,
-    req_id: Annotated[int | None, Query()] = None,
-    car_platform_id: Annotated[int | None, Query()] = None,
-    date_of_scrape_from: Annotated[datetime | None, Query()] = None,
-    date_of_scrape_to: Annotated[datetime | None, Query()] = None,
+    query: Annotated[ScrapedCarQuery, Query()] = ScrapedCarQuery(),
 ):
     return await repo.fetch_scraped_cars(
-        id=id, car_id=car_id, req_id=req_id, car_platform_id=car_platform_id,
-        date_of_scrape_from=date_of_scrape_from, date_of_scrape_to=date_of_scrape_to
+        id=query.id,
+        car_id=query.car_id,
+        request_id=query.request_id,
+        car_platform_id=query.car_platform_id,
+        date_of_scrape_from=query.date_of_scrape_from,
+        date_of_scrape_to=query.date_of_scrape_to,
     )
 
 
@@ -88,3 +95,18 @@ async def get_scrape_request(
 ):
     scrape_request = await repo.fetch_scrape_request(request_id)
     return ScrapeRequestResponse.model_validate(scrape_request)
+
+
+@scraping_router.get("/scraped-cars/csv")
+async def get_scraped_cars_csv(
+    csv_service: CSVServiceDependency,
+    query: Annotated[ScrapedCarQuery, Query()] = ScrapedCarQuery(),
+):
+    csv_content = await csv_service.generate_scraped_cars_csv(query)
+
+    headers = {
+        "Content-Disposition": 'attachment; filename="scraped_cars.csv"',
+        "Content-Type": "text/csv; charset=utf-8",
+    }
+
+    return StreamingResponse(csv_content, headers=headers)

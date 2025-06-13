@@ -79,10 +79,20 @@ class ScrapingResults(BaseModel):
     results: List[ScrapingResultSuccess | ScrapingResultError]
     summary: Summary
 
+
 class ScrapingResultsByCarModels(BaseModel):
     car_ids: List[int]
     results: List[ScrapingResultSuccess | ScrapingResultError]
     summary: Summary
+
+
+class ScrapedCarQuery(BaseModel):
+    id: int | None = None
+    car_id: int | None = None
+    request_id: int | None = None
+    car_platform_id: int | None = None
+    date_of_scrape_from: datetime | None = None
+    date_of_scrape_to: datetime | None = None
 
 
 class ScrapedRequestCreate(BaseModel):

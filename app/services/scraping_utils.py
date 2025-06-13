@@ -264,7 +264,10 @@ async def scrape_car_data(
         )
 
         if car_platform.button_selector:
+            await page.wait_for_selector(car_platform.button_selector)
             await page.locator(car_platform.button_selector).click()
+            await page.wait_for_timeout(1000)
+
 
         car_urls = await scrape_car_list(
             page,

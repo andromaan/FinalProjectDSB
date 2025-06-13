@@ -10,6 +10,7 @@ from models.scraped_car import ScrapedCar
 from models.scrape_request import ScrapeRequest
 from datetime import datetime
 
+
 class ScrapingRepository:
     def __init__(self, session: SessionContext):
         self.session = session
@@ -26,11 +27,7 @@ class ScrapingRepository:
         return scrape_req
 
     async def add_scraped_car(self, car_data: ScrapedCarCreate) -> ScrapedCar:
-        stmt = (
-            insert(ScrapedCar)
-            .values(**car_data.model_dump())
-            .returning(ScrapedCar)
-        )
+        stmt = insert(ScrapedCar).values(**car_data.model_dump()).returning(ScrapedCar)
         result = await self.session.execute(stmt)
         await self.session.commit()
         return result.scalar_one()
@@ -39,7 +36,7 @@ class ScrapingRepository:
         self,
         id: int | None = None,
         car_id: int | None = None,
-        req_id: int | None = None,
+        request_id: int | None = None,
         car_platform_id: int | None = None,
         date_of_scrape_from: datetime | None = None,
         date_of_scrape_to: datetime | None = None,
@@ -49,8 +46,8 @@ class ScrapingRepository:
             stmt = stmt.where(ScrapedCar.id == id)
         if car_id is not None:
             stmt = stmt.where(ScrapedCar.car_id == car_id)
-        if req_id is not None:
-            stmt = stmt.where(ScrapedCar.request_id == req_id)
+        if request_id is not None:
+            stmt = stmt.where(ScrapedCar.request_id == request_id)
         if car_platform_id is not None:
             stmt = stmt.where(ScrapedCar.car_platform_id == car_platform_id)
         if date_of_scrape_from is not None:
