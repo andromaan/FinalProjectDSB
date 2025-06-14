@@ -43,8 +43,8 @@ async def scrape_cars_by_car_model(
         ScrapingConfigByQuery(
             brand=car_model.brand,
             model=car_model.model,
-            year_from=str(car_model.year_from),
-            year_to=str(car_model.year_to),
+            year_from=car_model.year_from,
+            year_to=car_model.year_to,
             car_platform_ids=config.car_platform_ids,
         ),
         headless=headless,

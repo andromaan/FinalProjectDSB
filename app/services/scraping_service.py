@@ -271,8 +271,8 @@ class ScrapingService:
                         config=ScrapingConfigByQuery(
                             brand=car.brand,
                             model=car.model,
-                            year_from=str(car.year_from),
-                            year_to=str(car.year_to),
+                            year_from=car.year_from,
+                            year_to=car.year_to,
                             car_platform_ids=config.car_platform_ids,
                         ),
                         scrape_request_id=scraping_request.id,

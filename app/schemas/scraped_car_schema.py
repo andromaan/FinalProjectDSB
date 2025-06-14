@@ -1,6 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 
@@ -32,8 +32,8 @@ class ScrapedCarCreate(BaseModel):
 class ScrapingConfigByQuery(BaseModel):
     brand: str
     model: str
-    year_from: str
-    year_to: str
+    year_from: int = Field(..., ge=1985, le=datetime.now(timezone.utc).year)
+    year_to: int = Field(..., ge=1985, le=datetime.now(timezone.utc).year)
     car_platform_ids: List[int]
 
 
@@ -75,8 +75,8 @@ class ScrapingResults(BaseModel):
     scrape_request_id: int
     brand_searched: str
     model_searched: str
-    year_from_searched: str
-    year_to_searched: str
+    year_from_searched: int
+    year_to_searched: int
     results: List[ScrapingResultSuccess | ScrapingResultError]
     summary: ScrapeResultSummary
 

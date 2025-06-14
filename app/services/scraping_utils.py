@@ -222,8 +222,8 @@ async def scrape_car_data(
     car_platform: CarPlatform,
     brand: str,
     model: str,
-    year_from: str,
-    year_to: str,
+    year_from: int,
+    year_to: int,
 ) -> list[ScrapedCarItem]:
     page: Optional[Page] = None
     try:
@@ -252,21 +252,21 @@ async def scrape_car_data(
             page,
             car_platform.year_from_selector,
             car_platform.year_from_item_selector,
-            year_from,
+            str(year_from),
             car_platform.close_selector,
         )
         await select_option_or_click(
             page,
             car_platform.year_to_selector,
             car_platform.year_to_item_selector,
-            year_to,
+            str(year_to),
             car_platform.close_selector,
         )
 
         if car_platform.button_selector:
             await page.wait_for_selector(car_platform.button_selector)
             await page.locator(car_platform.button_selector).click()
-            await page.wait_for_timeout(7000)
+            await page.wait_for_timeout(5000)
 
 
         car_urls = await scrape_car_list(

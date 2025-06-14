@@ -1,11 +1,11 @@
-from pydantic import BaseModel
-from datetime import datetime
+from pydantic import BaseModel, Field
+from datetime import datetime, timezone
 
 class CarModelCreateUpdate(BaseModel):
     brand: str
     model: str
-    year_from: int
-    year_to: int
+    year_from: int = Field(..., ge=1985, le=datetime.now(timezone.utc).year)
+    year_to: int = Field(..., ge=1985, le=datetime.now(timezone.utc).year)
 
 class CarModelResponse(CarModelCreateUpdate):
     id: int

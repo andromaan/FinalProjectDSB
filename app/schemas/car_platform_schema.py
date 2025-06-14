@@ -1,9 +1,9 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
 class CarPlatformCreateUpdate(BaseModel):
-    name: str
+    name: str = Field(..., max_length=100, min_length=3)
     base_search_url: str
     brand_selector: str
     brand_item_selector: Optional[str] = None
