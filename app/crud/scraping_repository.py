@@ -1,5 +1,4 @@
 from fastapi import Depends, HTTPException
-from models.car import Car
 from db import SessionContext
 from typing import Annotated, List
 from sqlalchemy import select, insert, delete
@@ -59,10 +58,11 @@ class ScrapingRepository:
             stmt = stmt.where(
                 ScrapedCar.scraped_at <= car_search_criteria.date_of_scrape_to
             )
-        if car_search_criteria.name_of_car_brand is not None:
-            # its search by car brand name 
-            stmt = stmt.join(Car).where(
-                Car.brand.ilike(f"%{car_search_criteria.name_of_car_brand}%")
+        if car_search_criteria.name_of_scrape_query is not None:
+            stmt = stmt.join(ScrapeRequest).where(
+                ScrapeRequest.search_query.ilike(
+                    f"%{car_search_criteria.name_of_scrape_query}%"
+                )
             )
         result = await self.session.execute(stmt)
         cars = result.scalars().all()

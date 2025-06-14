@@ -64,10 +64,11 @@ class ScrapingResultError(BaseModel):
     scraped_at: datetime
 
 
-class Summary(BaseModel):
+class ScrapeResultSummary(BaseModel):
     total_marketplaces_processed: int
     successful_scrapes: int
     failed_scrapes: int
+    total_cars_scraped: int
 
 
 class ScrapingResults(BaseModel):
@@ -77,13 +78,13 @@ class ScrapingResults(BaseModel):
     year_from_searched: str
     year_to_searched: str
     results: List[ScrapingResultSuccess | ScrapingResultError]
-    summary: Summary
+    summary: ScrapeResultSummary
 
 
 class ScrapingResultsByCarModels(BaseModel):
     car_ids: List[int]
     results: List[ScrapingResultSuccess | ScrapingResultError]
-    summary: Summary
+    summary: ScrapeResultSummary
 
 
 class ScrapedCarQuery(BaseModel):
@@ -93,7 +94,7 @@ class ScrapedCarQuery(BaseModel):
     car_platform_id: int | None = None
     date_of_scrape_from: datetime | None = None
     date_of_scrape_to: datetime | None = None
-    name_of_car_brand: str | None = None
+    name_of_scrape_query: str | None = None
 
 
 class ScrapedRequestCreate(BaseModel):

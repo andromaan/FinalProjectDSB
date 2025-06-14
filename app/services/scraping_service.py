@@ -8,12 +8,12 @@ from schemas.scraped_car_schema import (
     ScrapingResultSuccess,
     ScrapingResultError,
     ScrapingResults,
-    Summary,
+    ScrapeResultSummary,
     ScrapedCarCreate,
     ScrapingStatus,
     ScrapedRequestCreate,
     ScrapingConfigByCarsModel,
-    ScrapingResultsByCarModels
+    ScrapingResultsByCarModels,
 )
 from crud.scraping_repository import ScrapingRepositoryDependency
 from crud.car_platform_repository import CarPlatformRepositoryDependency
@@ -41,7 +41,7 @@ class ScrapingService:
         config: ScrapingConfigByQuery,
         scrape_request_id: int,
         semaphore: asyncio.Semaphore,
-        car_id: Optional[int] = None
+        car_id: Optional[int] = None,
     ) -> ScrapingResultSuccess | ScrapingResultError:
         async with semaphore:
             start_time = time.perf_counter()
@@ -80,7 +80,6 @@ class ScrapingService:
                     f"Scraped {car_platform.name} in {time_to_scrape_platform:.2f} seconds"
                 )
 
-                # Return the first result for simplicity in results summary
                 return ScrapingResultSuccess(
                     marketplace_name=car_platform.name,
                     status="success",
@@ -127,7 +126,10 @@ class ScrapingService:
                 )
 
     async def scrape_car(
-        self, config: ScrapingConfigByQuery, headless: bool = True, car_id: Optional[int] = None
+        self,
+        config: ScrapingConfigByQuery,
+        headless: bool = True,
+        car_id: Optional[int] = None,
     ) -> ScrapingResults:
         all_car_platforms = await self.repo_car_platform.get_all_car_platforms()
 
@@ -171,7 +173,7 @@ class ScrapingService:
                     config=config,
                     scrape_request_id=scraping_request.id,
                     semaphore=semaphore,
-                    car_id=car_id
+                    car_id=car_id,
                 )
                 for car_platform in chosen_car_platforms
             ]
@@ -180,13 +182,18 @@ class ScrapingService:
             await context.close()
             await browser.close()
 
-        summary = Summary(
+        
+
+        summary = ScrapeResultSummary(
             total_marketplaces_processed=len(results),
             successful_scrapes=sum(
                 1 for r in results if isinstance(r, ScrapingResultSuccess)
             ),
             failed_scrapes=sum(
                 1 for r in results if isinstance(r, ScrapingResultError)
+            ),
+            total_cars_scraped=sum(
+                r.cars_scraped for r in results if isinstance(r, ScrapingResultSuccess)
             ),
         )
 
@@ -199,7 +206,7 @@ class ScrapingService:
             results=results,
             summary=summary,
         )
-    
+
     async def scrape_cars(
         self, config: ScrapingConfigByCarsModel, headless: bool = True
     ) -> ScrapingResultsByCarModels:
@@ -222,13 +229,11 @@ class ScrapingService:
             chosen_car_platforms = all_car_platforms
 
         all_car_models = await self.repo_car_model.get_all_car_models()
-        
+
         if config.car_ids:
             car_model_map = {car.id: car for car in all_car_models}
             chosen_car_models = [
-                car
-                for car_id, car in car_model_map.items()
-                if car_id in config.car_ids
+                car for car_id, car in car_model_map.items() if car_id in config.car_ids
             ]
             if len(chosen_car_models) != len(config.car_ids):
                 invalid_ids = set(config.car_ids) - set(car_model_map.keys())
@@ -240,20 +245,18 @@ class ScrapingService:
             chosen_car_models = all_car_models
 
         results: List[ScrapingResultSuccess | ScrapingResultError] = []
-        max_concurrent_requests = 4
+        max_concurrent_requests = 6
         semaphore = asyncio.Semaphore(max_concurrent_requests)
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=headless)
             tasks = []
-            contexts = {}  # Зберігаємо контексти для кожної машини
 
-            # Створюємо всі таби одразу
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/114.0"
+            )
+
             for car in chosen_car_models:
-                context = await browser.new_context(
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/114.0"
-                )
-                contexts[car.id] = context
                 scraping_request = await self.repo_scraping.add_scrape_request(
                     ScrapedRequestCreate(
                         car_id=car.id,
@@ -270,35 +273,39 @@ class ScrapingService:
                             model=car.model,
                             year_from=str(car.year_from),
                             year_to=str(car.year_to),
-                            car_platform_ids=config.car_platform_ids
+                            car_platform_ids=config.car_platform_ids,
                         ),
                         scrape_request_id=scraping_request.id,
                         semaphore=semaphore,
-                        car_id=car.id
+                        car_id=car.id,
                     )
                     for car_platform in chosen_car_platforms
                 ]
                 tasks.extend(car_tasks)
 
-            # Виконуємо всі завдання паралельно
             results_raw = await asyncio.gather(*tasks, return_exceptions=True)
-
-            # Закриваємо всі контексти після завершення
-            for context in contexts.values():
-                await context.close()
 
             await browser.close()
 
-        # Фільтруємо результати, залишаємо лише валідні
         results: List[ScrapingResultSuccess | ScrapingResultError] = [
-            r for r in results_raw if isinstance(r, (ScrapingResultSuccess, ScrapingResultError))
+            r
+            for r in results_raw
+            if isinstance(r, (ScrapingResultSuccess, ScrapingResultError))
         ]
         error_count = sum(1 for r in results_raw if isinstance(r, Exception))
 
-        summary = Summary(
+        total_cars_scraped = sum(
+            r.cars_scraped for r in results if isinstance(r, ScrapingResultSuccess)
+        )
+
+        summary = ScrapeResultSummary(
             total_marketplaces_processed=len(results) + error_count,
-            successful_scrapes=len([r for r in results if isinstance(r, ScrapingResultSuccess)]),
-            failed_scrapes=error_count + len([r for r in results if isinstance(r, ScrapingResultError)]),
+            successful_scrapes=len(
+                [r for r in results if isinstance(r, ScrapingResultSuccess)]
+            ),
+            failed_scrapes=error_count
+            + len([r for r in results if isinstance(r, ScrapingResultError)]),
+            total_cars_scraped=total_cars_scraped,
         )
 
         return ScrapingResultsByCarModels(
