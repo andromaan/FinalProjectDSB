@@ -29,3 +29,14 @@ class Coefficient(BaseModel):
 
 class RegressionCoefficients(BaseModel):
     coefficients: List[Coefficient]
+
+
+class RegressionCoefficientTableRow(BaseModel):
+    feature: str
+    coefficient: float
+    p_value: float
+    significance: str
+    interpretation: str
+
+class RegressionCoefficientTable(BaseModel):
+    rows: List[RegressionCoefficientTableRow]

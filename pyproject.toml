@@ -10,10 +10,12 @@ dependencies = [
     "beautifulsoup4~=4.13.4",
     "colorlog>=6.9.0",
     "fastapi[standard]~=0.115.12",
+    "matplotlib>=3.10.3",
     "pandas~=2.3.0",
     "playwright~=1.52.0",
     "pydantic~=2.11.5",
     "pydantic-settings~=2.9.1",
+    "seaborn>=0.13.2",
     "sqlalchemy~=2.0.41",
     "statsmodels~=0.14.4",
 ]

@@ -1,6 +1,6 @@
 import pandas as pd
 import statsmodels.api as sm
-from typing import Annotated, Dict, Optional
+from typing import Annotated, Dict, Optional, List
 from fastapi import Depends
 from schemas.regression_schema import (
     RegressionInputSearchPosition,
@@ -8,9 +8,14 @@ from schemas.regression_schema import (
     RegressionOutput,
     RegressionCoefficients,
     Coefficient,
+    RegressionCoefficientTable,
+    RegressionCoefficientTableRow
 )
 from services.csv_service import CSVServiceDependency, ScrapedCarQuery
 from services.logger_service import logger
+
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 class RegressionService:
     def __init__(self, csv_service: CSVServiceDependency):
@@ -23,14 +28,12 @@ class RegressionService:
         self.last_query_hash: Optional[str] = None
 
     def _get_query_hash(self, query: ScrapedCarQuery) -> str:
-        """Генерує унікальний хеш для ScrapedCarQuery."""
         import hashlib
-        query_dict = query.dict()
+        query_dict = query.model_dump()
         query_str = str(sorted(query_dict.items()))
         return hashlib.md5(query_str.encode()).hexdigest()
 
     async def _load_and_prepare_data(self, cars_scraping_query: ScrapedCarQuery) -> pd.DataFrame:
-        """Завантажує і готує дані з CSVService."""
         query_hash = self._get_query_hash(cars_scraping_query)
 
         if self.df_cache is not None and self.last_query_hash == query_hash:
@@ -85,14 +88,12 @@ class RegressionService:
         return df
 
     def _create_input_df(self, input_data: Dict, columns: list) -> pd.DataFrame:
-        """Створює DataFrame для прогнозування з константою."""
         input_df = pd.DataFrame([input_data], columns=columns)
         input_df = sm.add_constant(input_df, has_constant="add")
         logger.debug(f"Input DataFrame columns: {input_df.columns}")
         return input_df
 
     def _train_search_position_model(self, df: pd.DataFrame) -> sm.OLS:
-        """Тренує модель для search_position."""
         logger.info("Training search position model")
         X = df[["year_of_car", "price", "mileage", "number_of_views"]]
         y = df["search_position"]
@@ -111,7 +112,6 @@ class RegressionService:
         return model
 
     def _train_price_model(self, df: pd.DataFrame) -> sm.OLS:
-        """Тренує модель для price."""
         logger.info("Training price model")
         X = df[["search_position", "mileage", "year_of_car", "number_of_views"]]
         y = df["price"]
@@ -130,7 +130,6 @@ class RegressionService:
         return model
 
     async def _initialize_models(self, cars_scraping_query: ScrapedCarQuery, model_type: str = "both"):
-        """Ініціалізує моделі для поточного запиту."""
         df = await self._load_and_prepare_data(cars_scraping_query)
         query_hash = self._get_query_hash(cars_scraping_query)
 
@@ -151,7 +150,6 @@ class RegressionService:
         input_data: RegressionInputSearchPosition,
         cars_scraping_query: ScrapedCarQuery,
     ) -> RegressionOutput:
-        """Прогнозує search_position."""
         await self._initialize_models(cars_scraping_query, model_type="search_position")
         logger.info("Predicting search position")
         input_dict = {
@@ -178,7 +176,6 @@ class RegressionService:
         input_data: RegressionInputPrice,
         cars_scraping_query: ScrapedCarQuery,
     ) -> RegressionOutput:
-        """Прогнозує price."""
         await self._initialize_models(cars_scraping_query, model_type="price")
         logger.info("Predicting price")
         input_dict = {
@@ -203,7 +200,6 @@ class RegressionService:
     async def get_search_position_coefficients(
         self, cars_scraping_query: ScrapedCarQuery
     ) -> RegressionCoefficients:
-        """Повертає коефіцієнти для search_position."""
         await self._initialize_models(cars_scraping_query, model_type="search_position")
         logger.info("Retrieving search position coefficients")
         return RegressionCoefficients(coefficients=self.search_position_coefficients)
@@ -211,10 +207,94 @@ class RegressionService:
     async def get_price_coefficients(
         self, cars_scraping_query: ScrapedCarQuery
     ) -> RegressionCoefficients:
-        """Повертає коефіцієнти для price."""
         await self._initialize_models(cars_scraping_query, model_type="price")
         logger.info("Retrieving price coefficients")
         return RegressionCoefficients(coefficients=self.price_coefficients)
+    
+    def create_coefficients_plot(self, coefficients: List[Coefficient], model_name: str) -> str:
+        """Створює графік коефіцієнтів і повертає шлях до файлу."""
+
+        # Створюємо DataFrame з коефіцієнтами
+        coef_df = pd.DataFrame([c.model_dump() for c in coefficients])
+        
+        # Відокремлюємо const від інших коефіцієнтів
+        const_value = coef_df[coef_df['feature'] == 'const']['coefficient'].iloc[0]
+        const_p_value = coef_df[coef_df['feature'] == 'const']['p_value'].iloc[0]
+        other_coefs = coef_df[coef_df['feature'] != 'const'].copy()
+
+        # Нормалізація інших коефіцієнтів відносно максимального абсолютного значення
+        max_abs_coef = abs(other_coefs['coefficient']).max() if not other_coefs.empty else 1.0
+        other_coefs['coefficient_normalized'] = other_coefs['coefficient'] / max_abs_coef
+
+        plt.figure(figsize=(10, 6))
+        
+        # Малюємо стовпчики для інших коефіцієнтів
+        if not other_coefs.empty:
+            sns.barplot(x='coefficient_normalized', y='feature', hue='feature', data=other_coefs, palette='Blues_d')
+            plt.xlabel('Coefficient Value (Normalized to Max)')
+        else:
+            plt.xlabel('Coefficient Value (No Data)')
+
+        # Додаємо позначки значущості для інших коефіцієнтів
+        for i, row in other_coefs.iterrows():
+            if row['p_value'] < 0.05:
+                plt.text(row['coefficient_normalized'], i, '*', fontsize=12, va='center')
+
+        # Додаємо const як текст над графіком
+        plt.title(f'{model_name} Regression Coefficients')
+        plt.ylabel('Feature')
+        const_significance = '*' if const_p_value < 0.05 else ''
+        plt.text(0.5, 1.1, f'const: {const_value:.2f} {const_significance}', 
+                 transform=plt.gca().transAxes, fontsize=10, ha='center', color='red')
+
+        # Налаштування меж осі X
+        plt.xlim(-1.5, 1.5)  # Фіксований діапазон для кращої видимості
+
+        plot_path = f"{model_name.lower().replace(' ', '_')}_coefficients_plot.png"
+        plt.savefig(plot_path)
+        plt.close()
+        logger.info(f"Created plot at {plot_path}")
+        return plot_path
+
+    async def get_price_coefficients_plot(self, cars_scraping_query: ScrapedCarQuery) -> str:
+        await self._initialize_models(cars_scraping_query, model_type="price")
+        return self.create_coefficients_plot(self.price_coefficients, "Price")
+    
+    async def get_search_position_coefficient_table(
+        self, cars_scraping_query: ScrapedCarQuery
+    ) -> RegressionCoefficientTable:
+        await self._initialize_models(cars_scraping_query, model_type="search_position")
+        logger.info("Retrieving search position coefficient table")
+        return self._get_coefficient_table(self.search_position_coefficients, "search_position")
+    
+    def _get_coefficient_table(self, coefficients: List[Coefficient], model_type: str) -> RegressionCoefficientTable:
+        rows = []
+        for coef in coefficients:
+            significance = "Significant" if coef.p_value < 0.05 else "Not significant"
+            if coef.feature == "const":
+                interpretation = "Baseline value (intercept) of the model"
+            else:
+                impact = "increases" if coef.coefficient > 0 else "decreases"
+                interpretation = (
+                    f"An increase of {coef.feature} by 1 unit {impact} "
+                    f"{model_type} by {abs(coef.coefficient):.4f} "
+                    f"({'significant' if coef.p_value < 0.05 else 'not significant'} effect)"
+                )
+            rows.append(RegressionCoefficientTableRow(
+                feature=coef.feature,
+                coefficient=round(coef.coefficient, 4),
+                p_value=round(coef.p_value, 4),
+                significance=significance,
+                interpretation=interpretation
+            ))
+        return RegressionCoefficientTable(rows=rows)
+    
+    async def get_price_coefficient_table(
+        self, cars_scraping_query: ScrapedCarQuery
+    ) -> RegressionCoefficientTable:
+        await self._initialize_models(cars_scraping_query, model_type="price")
+        logger.info("Retrieving price coefficient table")
+        return self._get_coefficient_table(self.price_coefficients, "price")
 
 def get_regression_service(csv_service: CSVServiceDependency):
     return RegressionService(csv_service=csv_service)
