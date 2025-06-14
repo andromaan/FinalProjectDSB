@@ -93,6 +93,7 @@ class ScrapedCarQuery(BaseModel):
     car_platform_id: int | None = None
     date_of_scrape_from: datetime | None = None
     date_of_scrape_to: datetime | None = None
+    name_of_car_brand: str | None = None
 
 
 class ScrapedRequestCreate(BaseModel):

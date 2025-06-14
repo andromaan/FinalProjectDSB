@@ -1,14 +1,15 @@
 from fastapi import Depends, HTTPException
+from models.car import Car
 from db import SessionContext
 from typing import Annotated, List
-from sqlalchemy import select, insert
+from sqlalchemy import select, insert, delete
 from schemas.scraped_car_schema import (
     ScrapedCarCreate,
     ScrapedRequestCreate,
+    ScrapedCarQuery,
 )
 from models.scraped_car import ScrapedCar
 from models.scrape_request import ScrapeRequest
-from datetime import datetime
 
 
 class ScrapingRepository:
@@ -34,29 +35,38 @@ class ScrapingRepository:
 
     async def fetch_scraped_cars(
         self,
-        id: int | None = None,
-        car_id: int | None = None,
-        request_id: int | None = None,
-        car_platform_id: int | None = None,
-        date_of_scrape_from: datetime | None = None,
-        date_of_scrape_to: datetime | None = None,
+        car_search_criteria: ScrapedCarQuery = ScrapedCarQuery(),
     ) -> List[ScrapedCar]:
         stmt = select(ScrapedCar)
-        if id is not None:
-            stmt = stmt.where(ScrapedCar.id == id)
-        if car_id is not None:
-            stmt = stmt.where(ScrapedCar.car_id == car_id)
-        if request_id is not None:
-            stmt = stmt.where(ScrapedCar.request_id == request_id)
-        if car_platform_id is not None:
-            stmt = stmt.where(ScrapedCar.car_platform_id == car_platform_id)
-        if date_of_scrape_from is not None:
-            stmt = stmt.where(ScrapedCar.scraped_at >= date_of_scrape_from)
-        if date_of_scrape_to is not None:
-            stmt = stmt.where(ScrapedCar.scraped_at <= date_of_scrape_to)
+        if car_search_criteria.id is not None:
+            stmt = stmt.where(ScrapedCar.id == car_search_criteria.id)
+        if car_search_criteria.car_id is not None:
+            if car_search_criteria.car_id == 0:
+                stmt = stmt.where(ScrapedCar.car_id.is_(None))
+            else:
+                stmt = stmt.where(ScrapedCar.car_id == car_search_criteria.car_id)
+        if car_search_criteria.request_id is not None:
+            stmt = stmt.where(ScrapedCar.request_id == car_search_criteria.request_id)
+        if car_search_criteria.car_platform_id is not None:
+            stmt = stmt.where(
+                ScrapedCar.car_platform_id == car_search_criteria.car_platform_id
+            )
+        if car_search_criteria.date_of_scrape_from is not None:
+            stmt = stmt.where(
+                ScrapedCar.scraped_at >= car_search_criteria.date_of_scrape_from
+            )
+        if car_search_criteria.date_of_scrape_to is not None:
+            stmt = stmt.where(
+                ScrapedCar.scraped_at <= car_search_criteria.date_of_scrape_to
+            )
+        if car_search_criteria.name_of_car_brand is not None:
+            # its search by car brand name 
+            stmt = stmt.join(Car).where(
+                Car.brand.ilike(f"%{car_search_criteria.name_of_car_brand}%")
+            )
         result = await self.session.execute(stmt)
         cars = result.scalars().all()
-        if id is not None and not cars:
+        if car_search_criteria.id is not None and not cars:
             raise HTTPException(status_code=404, detail="Scraped car not found")
         return list(cars)
 
@@ -72,6 +82,17 @@ class ScrapingRepository:
         if req is None:
             raise HTTPException(status_code=404, detail="Scrape request not found")
         return req
+
+    async def delete_scrape_request(self, req_id: int) -> None:
+        try:
+            stmt = delete(ScrapeRequest).where(ScrapeRequest.id == req_id)
+            result = await self.session.execute(stmt)
+            if result.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Scrape request not found")
+            await self.session.commit()
+        except Exception as e:
+            await self.session.rollback()
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 ScrapingRepositoryDependency = Annotated[

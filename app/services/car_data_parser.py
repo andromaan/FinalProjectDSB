@@ -47,7 +47,8 @@ class CarDataParser:
             digits = ''.join(c for c in year_text if c.isdigit())
             return int(digits) if digits else None
         elif year_text and " " in year_text:
-            digits = ''.join(c for c in year_text if c.isdigit())
+            splitted_text = year_text.split(' ')
+            digits = ''.join(c for c in splitted_text if c.isdigit() and len(c) == 4)
             return int(digits) if digits else None
         elif year_text and year_text.isdigit():
             return int(year_text)

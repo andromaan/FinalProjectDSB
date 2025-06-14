@@ -171,6 +171,7 @@ class ScrapingService:
                     config=config,
                     scrape_request_id=scraping_request.id,
                     semaphore=semaphore,
+                    car_id=car_id
                 )
                 for car_platform in chosen_car_platforms
             ]

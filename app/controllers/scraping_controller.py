@@ -66,15 +66,10 @@ async def scrape_cars_by_cars_models(
 @scraping_router.get("/scraped-cars", response_model=list[ScrapedRequestResponse])
 async def get_scraped_cars(
     repo: ScrapingRepositoryDependency,
-    query: Annotated[ScrapedCarQuery, Query()] = ScrapedCarQuery(),
+    car_search_criteria: Annotated[ScrapedCarQuery, Query()] = ScrapedCarQuery(),
 ):
     return await repo.fetch_scraped_cars(
-        id=query.id,
-        car_id=query.car_id,
-        request_id=query.request_id,
-        car_platform_id=query.car_platform_id,
-        date_of_scrape_from=query.date_of_scrape_from,
-        date_of_scrape_to=query.date_of_scrape_to,
+        car_search_criteria
     )
 
 
@@ -95,6 +90,12 @@ async def get_scrape_request(
 ):
     scrape_request = await repo.fetch_scrape_request(request_id)
     return ScrapeRequestResponse.model_validate(scrape_request)
+
+
+@scraping_router.delete("/scrape-request/{request_id}", response_model=None)
+async def delete_scrape_request(request_id: int, repo: ScrapingRepositoryDependency):
+    await repo.delete_scrape_request(request_id)
+    return {"detail": "Scrape request deleted successfully"}
 
 
 @scraping_router.get("/scraped-cars/csv")
