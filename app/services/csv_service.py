@@ -23,9 +23,9 @@ class CSVService:
         self.scraping_repo = scraping_repo
 
     async def generate_scraped_cars_csv(
-        self, cars_query: ScrapedCarQuery
+        self, cars_scraping_query: ScrapedCarQuery
     ) -> io.BytesIO:
-        cars = await self.scraping_repo.fetch_scraped_cars(cars_query)
+        cars = await self.scraping_repo.fetch_scraped_cars(cars_scraping_query)
 
         output = io.StringIO()
         writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL, lineterminator="\n")
