@@ -44,8 +44,9 @@ class CSVService:
         writer.writerow(headers)
 
         # Process each car and write valid rows
+        index = 1
         exchange_rate = await fetch_exchange_rates()
-        for index, car in enumerate(cars, start=1):
+        for car in cars:
             # Check if any required field is None
             if any(
                 getattr(car, field) is None
@@ -80,6 +81,7 @@ class CSVService:
                 car.scraped_at.isoformat(),
             ]
             writer.writerow(row)
+            index += 1
 
         # Convert StringIO to BytesIO for streaming
         output.seek(0)
