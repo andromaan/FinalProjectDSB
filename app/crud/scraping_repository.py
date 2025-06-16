@@ -1,7 +1,7 @@
 from fastapi import Depends, HTTPException
 from db import SessionContext
 from typing import Annotated, List
-from sqlalchemy import select, insert, delete
+from sqlalchemy import Integer, select, insert, delete
 from schemas.scraped_car_schema import (
     ScrapedCarCreate,
     ScrapedRequestCreate,
@@ -58,12 +58,25 @@ class ScrapingRepository:
             stmt = stmt.where(
                 ScrapedCar.scraped_at <= car_search_criteria.date_of_scrape_to
             )
-        if car_search_criteria.name_of_scrape_query is not None:
-            stmt = stmt.join(ScrapeRequest).where(
-                ScrapeRequest.search_query.ilike(
-                    f"%{car_search_criteria.name_of_scrape_query}%"
-                )
-            )
+        if car_search_criteria.name_of_scrape_query:
+            splitted_query = car_search_criteria.name_of_scrape_query.split()
+            stmt = stmt.join(ScrapeRequest)
+            if len(splitted_query) == 2 and "-" in splitted_query[1]:
+                try:
+                    year_from, year_to = map(int, splitted_query[1].split("-"))
+                    stmt = stmt.where(ScrapedCar.scraped_year.between(year_from, year_to))
+                except ValueError:
+                    pass
+                stmt = stmt.where(ScrapeRequest.search_query.ilike(f"%{splitted_query[0]}%"))
+            elif len(splitted_query) == 3 and "-" in splitted_query[2]:
+                try:
+                    year_from, year_to = map(int, splitted_query[2].split("-"))
+                    stmt = stmt.where(ScrapedCar.scraped_year.between(year_from, year_to))
+                except ValueError:
+                    pass
+                stmt = stmt.where(ScrapeRequest.search_query.ilike(f"%{splitted_query[0]} {splitted_query[1]}%"))
+            else:
+                stmt = stmt.where(ScrapeRequest.search_query.ilike(f"%{car_search_criteria.name_of_scrape_query}%"))
         result = await self.session.execute(stmt)
         cars = result.scalars().all()
         if car_search_criteria.id is not None and not cars:

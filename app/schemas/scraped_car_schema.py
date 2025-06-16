@@ -94,7 +94,7 @@ class ScrapedCarQuery(BaseModel):
     car_platform_id: int | None = None
     date_of_scrape_from: datetime | None = None
     date_of_scrape_to: datetime | None = None
-    name_of_scrape_query: str | None = None
+    name_of_scrape_query: str | None = Field(default=None, max_length=100, min_length=3)
 
 
 class ScrapedRequestCreate(BaseModel):
