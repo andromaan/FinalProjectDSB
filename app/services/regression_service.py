@@ -18,7 +18,6 @@ from datetime import datetime, timezone
 import matplotlib.pyplot as plt
 import seaborn as sns
 import json
-import asyncio
 import hashlib
 
 
@@ -149,8 +148,8 @@ class RegressionService:
         }
         await self.regression_model_repo.add_regression_model(model_data)
 
-    def _train_search_position_model(
-        self, df: pd.DataFrame, platform_id=None, save_to_db=False
+    async def _train_search_position_model(
+        self, df: pd.DataFrame, filters, save_to_db=False
     ):
         logger.info("Training search position model")
         X = df[["year_of_car", "price", "mileage", "number_of_views"]]
@@ -167,28 +166,27 @@ class RegressionService:
             )
         ]
         if save_to_db:
-            asyncio.create_task(
-                self.save_regression_model_to_db(
-                    name="Прогноз позиції на платформі",
-                    target_variable="search_position",
-                    feature_variables=json.dumps(
-                        ["year_of_car", "price", "mileage", "number_of_views"]
-                    ),
-                    coefficients_json=json.dumps(model.params.to_dict()),
-                    intercept=float(model.params["const"]),
-                    r_squared=float(model.rsquared),
-                    adj_r_squared=float(model.rsquared_adj),
-                    f_statistic=float(model.fvalue),
-                    f_p_value=float(model.f_pvalue),
-                    n_observations=int(model.nobs),
-                    filters=json.dumps(df.to_dict(orient="records")),
-                    formula="search_position ~ year_of_car + price + mileage + number_of_views",
-                )
+            await self.save_regression_model_to_db(
+                name="Прогноз позиції на платформі",
+                target_variable="search_position",
+                feature_variables=json.dumps(
+                    ["year_of_car", "price", "mileage", "number_of_views"]
+                ),
+                coefficients_json=json.dumps(model.params.to_dict()),
+                intercept=float(model.params["const"]),
+                r_squared=float(model.rsquared),
+                adj_r_squared=float(model.rsquared_adj),
+                f_statistic=float(model.fvalue),
+                f_p_value=float(model.f_pvalue),
+                n_observations=int(model.nobs),
+                filters=json.dumps(filters),
+                formula="search_position ~ year_of_car + price + mileage + number_of_views",
             )
+
         logger.info("Search position model trained")
         return model
 
-    def _train_price_model(self, df: pd.DataFrame, filters, save_to_db=False):
+    async def _train_price_model(self, df: pd.DataFrame, filters, save_to_db=False):
         logger.info("Training price model")
         X = df[["search_position", "mileage", "year_of_car", "number_of_views"]]
         y = df["price"]
@@ -210,9 +208,6 @@ class RegressionService:
             )
         ]
         if save_to_db:
-            import json
-            import asyncio
-
             model_summary = {
                 "coefficients": model.params.to_dict(),
                 "std_errors": model.bse.to_dict(),
@@ -220,34 +215,26 @@ class RegressionService:
                 "p_values": model.pvalues.to_dict(),
                 "confidence_intervals": model.conf_int().T.to_dict(),
             }
-            model_quality = {
-                "r_squared": model.rsquared,
-                "adj_r_squared": model.rsquared_adj,
-                "f_statistic": model.fvalue,
-                "f_p_value": model.f_pvalue,
-                "n_observations": int(model.nobs),
-            }
             formula = (
                 "price ~ search_position + mileage + year_of_car + number_of_views"
             )
-            asyncio.create_task(
-                self.save_regression_model_to_db(
-                    name="Прогноз ціни на платформі",
-                    target_variable="price",
-                    feature_variables=json.dumps(
-                        ["search_position", "mileage", "year_of_car", "number_of_views"]
-                    ),
-                    coefficients_json=json.dumps(model_summary),
-                    intercept=float(model.params["const"]),
-                    r_squared=float(model.rsquared),
-                    adj_r_squared=float(model.rsquared_adj),
-                    f_statistic=float(model.fvalue),
-                    f_p_value=float(model.f_pvalue),
-                    n_observations=int(model.nobs),
-                    filters=json.dumps(filters),
-                    formula=formula,
-                )
+            await self.save_regression_model_to_db(
+                name="Прогноз ціни на платформі",
+                target_variable="price",
+                feature_variables=json.dumps(
+                    ["search_position", "mileage", "year_of_car", "number_of_views"]
+                ),
+                coefficients_json=json.dumps(model_summary),
+                intercept=float(model.params["const"]),
+                r_squared=float(model.rsquared),
+                adj_r_squared=float(model.rsquared_adj),
+                f_statistic=float(model.fvalue),
+                f_p_value=float(model.f_pvalue),
+                n_observations=int(model.nobs),
+                filters=json.dumps(filters),
+                formula=formula,
             )
+
         logger.info("Price model trained")
         return model
 
@@ -272,11 +259,12 @@ class RegressionService:
             model_type in ["both", "search_position"]
             and self.search_position_model is None
         ):
-            # self.search_position_model = self._train_search_position_model(df, filters, save_to_db=save_to_db)
-            pass  # TODO: аналогічно реалізувати для search_position
+            self.search_position_model = await self._train_search_position_model(
+                df, filters, save_to_db=save_to_db
+            )
 
         if model_type in ["both", "price"] and self.price_model is None:
-            self.price_model = self._train_price_model(
+            self.price_model = await self._train_price_model(
                 df, filters, save_to_db=save_to_db
             )
 
@@ -365,17 +353,12 @@ class RegressionService:
     def create_coefficients_plot(
         self, coefficients: List[Coefficient], model_name: str
     ) -> str:
-        """Створює графік коефіцієнтів і повертає шлях до файлу."""
-
-        # Створюємо DataFrame з коефіцієнтами
         coef_df = pd.DataFrame([c.model_dump() for c in coefficients])
 
-        # Відокремлюємо const від інших коефіцієнтів
         const_value = coef_df[coef_df["feature"] == "const"]["coefficient"].iloc[0]
         const_p_value = coef_df[coef_df["feature"] == "const"]["p_value"].iloc[0]
         other_coefs = coef_df[coef_df["feature"] != "const"].copy()
 
-        # Нормалізація інших коефіцієнтів відносно максимального абсолютного значення
         max_abs_coef = (
             abs(other_coefs["coefficient"]).max() if not other_coefs.empty else 1.0
         )
@@ -385,7 +368,6 @@ class RegressionService:
 
         plt.figure(figsize=(10, 6))
 
-        # Малюємо стовпчики для інших коефіцієнтів
         if not other_coefs.empty:
             sns.barplot(
                 x="coefficient_normalized",
@@ -398,14 +380,12 @@ class RegressionService:
         else:
             plt.xlabel("Coefficient Value (No Data)")
 
-        # Додаємо позначки значущості для інших коефіцієнтів
         for i, row in other_coefs.iterrows():
             if row["p_value"] < 0.05:
                 plt.text(
                     row["coefficient_normalized"], i, "*", fontsize=12, va="center"
                 )
 
-        # Додаємо const як текст над графіком
         plt.title(f"{model_name} Regression Coefficients")
         plt.ylabel("Feature")
         const_significance = "*" if const_p_value < 0.05 else ""
@@ -419,8 +399,7 @@ class RegressionService:
             color="red",
         )
 
-        # Налаштування меж осі X
-        plt.xlim(-1.5, 1.5)  # Фіксований діапазон для кращої видимості
+        plt.xlim(-1.5, 1.5)
 
         plot_path = f"{model_name.lower().replace(' ', '_')}_coefficients_plot.png"
         plt.savefig(plot_path)
