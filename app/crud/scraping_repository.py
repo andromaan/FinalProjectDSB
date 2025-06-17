@@ -1,7 +1,7 @@
 from fastapi import Depends, HTTPException
 from db import SessionContext
 from typing import Annotated, List
-from sqlalchemy import Integer, select, insert, delete
+from sqlalchemy import select, insert, delete
 from schemas.scraped_car_schema import (
     ScrapedCarCreate,
     ScrapedRequestCreate,

@@ -30,7 +30,6 @@ class CSVService:
         output = io.StringIO()
         writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL, lineterminator="\n")
 
-        # Define headers for the CSV
         headers = [
             "No",
             "scraped_url",
@@ -43,11 +42,9 @@ class CSVService:
         ]
         writer.writerow(headers)
 
-        # Process each car and write valid rows
         index = 1
         exchange_rate = await fetch_exchange_rates()
         for car in cars:
-            # Check if any required field is None
             if any(
                 getattr(car, field) is None
                 for field in [
@@ -62,14 +59,12 @@ class CSVService:
             ):
                 continue
 
-            # Convert price to USD if currency is UAH (грн or ₴)
             price = car.scraped_price
             if car.scraped_currency in ["грн", "₴"]:
                 price = (
                     round(car.scraped_price / exchange_rate) if exchange_rate else price
                 )
 
-            # Prepare row with specified columns
             row = [
                 index,
                 car.scraped_url,
@@ -83,7 +78,6 @@ class CSVService:
             writer.writerow(row)
             index += 1
 
-        # Convert StringIO to BytesIO for streaming
         output.seek(0)
         bytes_output = io.BytesIO(output.getvalue().encode("utf-8"))
         output.close()

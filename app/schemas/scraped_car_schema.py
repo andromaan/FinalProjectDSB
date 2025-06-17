@@ -92,8 +92,8 @@ class ScrapedCarQuery(BaseModel):
     car_id: int | None = None
     request_id: int | None = None
     car_platform_id: int | None = None
-    date_of_scrape_from: datetime | None = None
-    date_of_scrape_to: datetime | None = None
+    date_of_scrape_from: datetime | None = Field(default=None, gt=Field(..., description="Date must be before date_of_scrape_to"))
+    date_of_scrape_to: datetime | None = Field(default=None, gt=Field(..., description="Date must be after date_of_scrape_from"))
     name_of_scrape_query: str | None = Field(default=None, max_length=100, min_length=3)
 
 
